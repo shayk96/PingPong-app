@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection
+    // - Anyone authenticated can read all users (for leaderboard)
+    // - Users can only update their own profile (except eloRating which is managed by match logic)
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eloRating']);
+    }
+    
+    // Matches collection
+    // - Anyone authenticated can read all matches
+    // - Anyone authenticated can create a match
+    // - Only the match creator can delete their own match
+    match /matches/{matchId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null 
+                    && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if request.auth != null 
+                    && resource.data.createdBy == request.auth.uid;
+      // No updates allowed - matches are immutable once created
+      allow update: if false;
+    }
+  }
+}
+
