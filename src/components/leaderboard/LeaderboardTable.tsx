@@ -26,42 +26,45 @@ export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: Lea
       {entries.map((entry, index) => (
         <div
           key={entry.user.id}
-          className="flex items-center gap-3 p-3 rounded-xl bg-background-light border border-transparent hover:border-background-lighter transition-all duration-200"
+          className="flex items-center gap-2 p-3 rounded-xl bg-background-light border border-transparent hover:border-background-lighter transition-all duration-200"
           style={{ animationDelay: `${index * 50}ms` }}
         >
           {/* Rank */}
-          <div className="w-10 text-center">
+          <div className="w-9 flex-shrink-0">
             <RankBadge rank={entry.rank} />
           </div>
 
           {/* Player info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-white truncate">
-                {entry.user.displayName}
-              </span>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="font-semibold text-white truncate">
+              {entry.user.displayName}
             </div>
-            <div className="flex items-center gap-1.5 text-sm text-gray-400">
-              <span>{getRatingTier(entry.user.eloRating)}</span>
-              <span>•</span>
-              <span className="text-success whitespace-nowrap">{entry.wins}W</span>
-              <span className="text-error whitespace-nowrap">{entry.losses}L</span>
+            <div className="text-sm text-gray-400">
+              {getRatingTier(entry.user.eloRating)}
             </div>
           </div>
 
-          {/* ELO and rank change */}
-          <div className="text-right mr-1">
+          {/* Stats column */}
+          <div className="flex-shrink-0 text-center px-2">
+            <div className="text-xs">
+              <span className="text-success">{entry.wins}W</span>
+              {' '}
+              <span className="text-error">{entry.losses}L</span>
+            </div>
+          </div>
+
+          {/* ELO */}
+          <div className="flex-shrink-0 w-14 text-right">
             <div className="font-display font-bold text-lg text-white">
               {entry.user.eloRating}
             </div>
-            <RankChange change={entry.rankChange} />
           </div>
 
           {/* View History button */}
           {onViewHistory && (
             <button
               onClick={() => onViewHistory(entry.user.id, entry.user.displayName)}
-              className="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-colors"
+              className="flex-shrink-0 p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-colors"
               title="View match history"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -74,7 +77,7 @@ export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: Lea
           {onDeletePlayer && (
             <button
               onClick={() => onDeletePlayer(entry.user.id, entry.user.displayName)}
-              className="p-2 text-gray-500 hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+              className="flex-shrink-0 p-2 text-gray-500 hover:text-error hover:bg-error/10 rounded-lg transition-colors"
               title="Delete player"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -115,28 +118,4 @@ function RankBadge({ rank }: { rank: number }) {
       {rank}
     </div>
   )
-}
-
-function RankChange({ change }: { change: number }) {
-  if (change > 0) {
-    return (
-      <div className="flex items-center justify-end text-success text-xs font-medium">
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-        </svg>
-        <span>{change}</span>
-      </div>
-    )
-  }
-  if (change < 0) {
-    return (
-      <div className="flex items-center justify-end text-error text-xs font-medium">
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-        <span>{Math.abs(change)}</span>
-      </div>
-    )
-  }
-  return <div className="text-xs text-gray-500">—</div>
 }
