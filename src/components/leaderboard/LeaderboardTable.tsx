@@ -41,11 +41,11 @@ export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: Lea
                 {entry.user.displayName}
               </span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-400">
+            <div className="flex items-center gap-1.5 text-sm text-gray-400">
               <span>{getRatingTier(entry.user.eloRating)}</span>
               <span>•</span>
-              <span className="text-success">{entry.wins}W</span>
-              <span className="text-error">{entry.losses}L</span>
+              <span className="text-success whitespace-nowrap">{entry.wins}W</span>
+              <span className="text-error whitespace-nowrap">{entry.losses}L</span>
             </div>
           </div>
 
