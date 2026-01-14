@@ -35,11 +35,11 @@ export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: Lea
           </div>
 
           {/* Player info */}
-          <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="flex-1 min-w-0">
             <div className="font-semibold text-white truncate">
               {entry.user.displayName}
             </div>
-            <div className="text-sm text-gray-400">
+            <div className="text-xs text-yellow-400">
               {getRatingTier(entry.user.eloRating)}
             </div>
           </div>
