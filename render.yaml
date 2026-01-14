@@ -1,0 +1,16 @@
+# Render.com deployment configuration
+# This file helps Render automatically configure your service
+
+services:
+  - type: web
+    name: pingpong-app
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false  # You'll set this manually in Render dashboard
+      - key: ADMIN_PASSWORD
+        sync: false  # You'll set this manually in Render dashboard

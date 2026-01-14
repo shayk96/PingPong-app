@@ -2,7 +2,9 @@
  * API client for communicating with the backend server
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+// In production, use relative URL (same origin), in development use localhost
+const API_URL = import.meta.env.VITE_API_URL || 
+  (import.meta.env.PROD ? '/api' : 'http://localhost:3001/api')
 
 // ============ Players ============
 

@@ -32,3 +32,7 @@ dist-ssr
 .firebase
 firebase-debug.log
 
+# Server data files (migrated to MongoDB)
+server/users.json
+server/matches.json
+server/data.json

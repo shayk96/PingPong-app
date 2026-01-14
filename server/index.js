@@ -1,217 +1,234 @@
 /**
- * Simple Express server with JSON file storage
+ * Express server with MongoDB storage
  * Run with: node server/index.js
  */
 
 import express from 'express'
 import cors from 'cors'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import mongoose from 'mongoose'
+import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { readFileSync, existsSync } from 'fs'
+
+// Load environment variables
+dotenv.config()
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const app = express()
 const PORT = process.env.PORT || 3001
-const USERS_FILE = join(__dirname, 'users.json')
-const MATCHES_FILE = join(__dirname, 'matches.json')
+
+// MongoDB connection string (from environment variable)
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pingpong'
+
+// Admin password for protected operations
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '207902602'
 
 // Middleware
 app.use(cors())
 app.use(express.json())
 
-// Initialize data files if they don't exist
-function initDataFiles() {
-  // Check if old data.json exists and migrate
-  const oldDataFile = join(__dirname, 'data.json')
-  if (existsSync(oldDataFile)) {
-    try {
-      const oldData = JSON.parse(readFileSync(oldDataFile, 'utf-8'))
-      
-      // Migrate users
-      if (!existsSync(USERS_FILE) && oldData.users) {
-        writeFileSync(USERS_FILE, JSON.stringify(oldData.users, null, 2))
-        console.log('Migrated users to users.json')
-      }
-      
-      // Migrate matches
-      if (!existsSync(MATCHES_FILE) && oldData.matches) {
-        writeFileSync(MATCHES_FILE, JSON.stringify(oldData.matches, null, 2))
-        console.log('Migrated matches to matches.json')
-      }
-    } catch (err) {
-      console.error('Error migrating old data:', err)
-    }
-  }
-
-  // Create users.json if it doesn't exist
-  if (!existsSync(USERS_FILE)) {
-    const initialUsers = [
-      { id: 'demo1', displayName: 'Alice', eloRating: 1000, wins: 0, losses: 0, createdAt: '2024-01-01T00:00:00.000Z' },
-      { id: 'demo2', displayName: 'Bob', eloRating: 1000, wins: 0, losses: 0, createdAt: '2024-01-02T00:00:00.000Z' },
-      { id: 'demo3', displayName: 'Charlie', eloRating: 1000, wins: 0, losses: 0, createdAt: '2024-01-03T00:00:00.000Z' },
-      { id: 'demo4', displayName: 'Diana', eloRating: 1000, wins: 0, losses: 0, createdAt: '2024-01-04T00:00:00.000Z' },
-    ]
-    writeFileSync(USERS_FILE, JSON.stringify(initialUsers, null, 2))
-    console.log('Created users.json')
-  }
-
-  // Create matches.json if it doesn't exist
-  if (!existsSync(MATCHES_FILE)) {
-    writeFileSync(MATCHES_FILE, JSON.stringify([], null, 2))
-    console.log('Created matches.json')
-  }
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(join(__dirname, '../dist')))
 }
 
-// Read users from JSON file
-function readUsers() {
-  try {
-    const data = readFileSync(USERS_FILE, 'utf-8')
-    return JSON.parse(data)
-  } catch (err) {
-    console.error('Error reading users file:', err)
-    return []
-  }
-}
+// ============ MongoDB Schemas ============
 
-// Write users to JSON file
-function writeUsers(users) {
-  writeFileSync(USERS_FILE, JSON.stringify(users, null, 2))
-}
+const userSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  displayName: { type: String, required: true },
+  eloRating: { type: Number, default: 1000 },
+  wins: { type: Number, default: 0 },
+  losses: { type: Number, default: 0 },
+  createdAt: { type: Date, default: Date.now }
+})
 
-// Read matches from JSON file
-function readMatches() {
-  try {
-    const data = readFileSync(MATCHES_FILE, 'utf-8')
-    return JSON.parse(data)
-  } catch (err) {
-    console.error('Error reading matches file:', err)
-    return []
-  }
-}
+const matchSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  playerAId: { type: String, required: true },
+  playerBId: { type: String, required: true },
+  playerAScore: { type: Number, required: true },
+  playerBScore: { type: Number, required: true },
+  winnerId: { type: String, required: true },
+  loserId: { type: String, required: true },
+  matchType: { type: Number, default: 11 },
+  winnerEloDelta: { type: Number, required: true },
+  loserEloDelta: { type: Number, required: true },
+  createdAt: { type: Date, default: Date.now }
+})
 
-// Write matches to JSON file
-function writeMatches(matches) {
-  writeFileSync(MATCHES_FILE, JSON.stringify(matches, null, 2))
-}
+const User = mongoose.model('User', userSchema)
+const Match = mongoose.model('Match', matchSchema)
 
 // Generate unique ID
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }
 
-// Admin password for protected operations
-const ADMIN_PASSWORD = '207902602'
+// ============ Data Migration from JSON files ============
+
+async function migrateFromJsonFiles() {
+  const usersFile = join(__dirname, 'users.json')
+  const matchesFile = join(__dirname, 'matches.json')
+  
+  // Check if we have existing users in MongoDB
+  const existingUsers = await User.countDocuments()
+  if (existingUsers > 0) {
+    console.log('📦 MongoDB already has data, skipping migration')
+    return
+  }
+  
+  // Migrate users
+  if (existsSync(usersFile)) {
+    try {
+      const usersData = JSON.parse(readFileSync(usersFile, 'utf-8'))
+      if (usersData.length > 0) {
+        await User.insertMany(usersData)
+        console.log(`✅ Migrated ${usersData.length} users from users.json`)
+      }
+    } catch (err) {
+      console.error('Error migrating users:', err.message)
+    }
+  }
+  
+  // Migrate matches
+  if (existsSync(matchesFile)) {
+    try {
+      const matchesData = JSON.parse(readFileSync(matchesFile, 'utf-8'))
+      if (matchesData.length > 0) {
+        await Match.insertMany(matchesData)
+        console.log(`✅ Migrated ${matchesData.length} matches from matches.json`)
+      }
+    } catch (err) {
+      console.error('Error migrating matches:', err.message)
+    }
+  }
+}
 
 // ============ API Routes ============
 
 // Get all players
-app.get('/api/players', (req, res) => {
-  const users = readUsers()
-  const players = users.sort((a, b) => b.eloRating - a.eloRating)
-  res.json(players)
+app.get('/api/players', async (req, res) => {
+  try {
+    const players = await User.find().sort({ eloRating: -1 })
+    res.json(players)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch players' })
+  }
 })
 
 // Add a new player
-app.post('/api/players', (req, res) => {
+app.post('/api/players', async (req, res) => {
   const { displayName } = req.body
   
   if (!displayName || !displayName.trim()) {
     return res.status(400).json({ error: 'Player name is required' })
   }
 
-  const users = readUsers()
-  
-  // Check for duplicate name
-  const existing = users.find(
-    u => u.displayName.toLowerCase() === displayName.toLowerCase()
-  )
-  if (existing) {
-    return res.status(400).json({ error: 'A player with this name already exists' })
-  }
+  try {
+    // Check for duplicate name (case-insensitive)
+    const existing = await User.findOne({ 
+      displayName: { $regex: new RegExp(`^${displayName.trim()}$`, 'i') }
+    })
+    
+    if (existing) {
+      return res.status(400).json({ error: 'A player with this name already exists' })
+    }
 
-  const newPlayer = {
-    id: generateId(),
-    displayName: displayName.trim(),
-    eloRating: 1000,
-    wins: 0,
-    losses: 0,
-    createdAt: new Date().toISOString()
-  }
+    const newPlayer = new User({
+      id: generateId(),
+      displayName: displayName.trim(),
+      eloRating: 1000,
+      wins: 0,
+      losses: 0,
+      createdAt: new Date()
+    })
 
-  users.push(newPlayer)
-  writeUsers(users)
-  
-  res.status(201).json(newPlayer)
+    await newPlayer.save()
+    res.status(201).json(newPlayer)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create player' })
+  }
 })
 
 // Delete a player (password protected)
-app.delete('/api/players/:id', (req, res) => {
+app.delete('/api/players/:id', async (req, res) => {
   const { id } = req.params
   const { password } = req.body || {}
   
-  // Check password
   if (password !== ADMIN_PASSWORD) {
     return res.status(403).json({ error: 'Invalid password' })
   }
 
-  const users = readUsers()
-  const matches = readMatches()
-  
-  // Check if player exists
-  const player = users.find(u => u.id === id)
-  if (!player) {
-    return res.status(404).json({ error: 'Player not found' })
-  }
+  try {
+    const player = await User.findOne({ id })
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' })
+    }
 
-  // Find matches involving this player and revert stats for opponents
-  const playerMatches = matches.filter(
-    m => m.playerAId === id || m.playerBId === id
-  )
-  
-  for (const match of playerMatches) {
-    const otherPlayerId = match.playerAId === id ? match.playerBId : match.playerAId
-    const otherPlayer = users.find(u => u.id === otherPlayerId)
-    
-    if (otherPlayer) {
+    // Find matches involving this player
+    const playerMatches = await Match.find({
+      $or: [{ playerAId: id }, { playerBId: id }]
+    })
+
+    // Revert stats for opponents
+    for (const match of playerMatches) {
+      const otherPlayerId = match.playerAId === id ? match.playerBId : match.playerAId
+      
       if (match.winnerId === otherPlayerId) {
-        otherPlayer.eloRating -= match.winnerEloDelta
-        otherPlayer.wins = Math.max(0, (otherPlayer.wins || 0) - 1)
+        await User.updateOne(
+          { id: otherPlayerId },
+          { 
+            $inc: { 
+              eloRating: -match.winnerEloDelta,
+              wins: -1 
+            }
+          }
+        )
       } else {
-        otherPlayer.eloRating -= match.loserEloDelta
-        otherPlayer.losses = Math.max(0, (otherPlayer.losses || 0) - 1)
+        await User.updateOne(
+          { id: otherPlayerId },
+          { 
+            $inc: { 
+              eloRating: -match.loserEloDelta,
+              losses: -1 
+            }
+          }
+        )
       }
     }
+
+    // Remove matches involving this player
+    await Match.deleteMany({
+      $or: [{ playerAId: id }, { playerBId: id }]
+    })
+
+    // Remove the player
+    await User.deleteOne({ id })
+    
+    res.json({ success: true, deletedMatches: playerMatches.length })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete player' })
   }
-
-  // Remove matches involving this player
-  const remainingMatches = matches.filter(
-    m => m.playerAId !== id && m.playerBId !== id
-  )
-  writeMatches(remainingMatches)
-
-  // Remove the player
-  const remainingUsers = users.filter(u => u.id !== id)
-  writeUsers(remainingUsers)
-  
-  res.json({ success: true, deletedMatches: playerMatches.length })
 })
 
 // Get all matches
-app.get('/api/matches', (req, res) => {
-  const matches = readMatches()
-  const sorted = matches.sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  )
-  res.json(sorted)
+app.get('/api/matches', async (req, res) => {
+  try {
+    const matches = await Match.find().sort({ createdAt: -1 })
+    res.json(matches)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch matches' })
+  }
 })
 
 // Create a new match
-app.post('/api/matches', (req, res) => {
+app.post('/api/matches', async (req, res) => {
   const { playerAId, playerBId, playerAScore, playerBScore, matchType } = req.body
 
-  // Validate input
   if (!playerAId || !playerBId || playerAScore === undefined || playerBScore === undefined) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
@@ -220,110 +237,134 @@ app.post('/api/matches', (req, res) => {
     return res.status(400).json({ error: 'Cannot play against yourself' })
   }
 
-  const users = readUsers()
-  const matches = readMatches()
-  
-  const playerA = users.find(u => u.id === playerAId)
-  const playerB = users.find(u => u.id === playerBId)
-  
-  if (!playerA || !playerB) {
-    return res.status(400).json({ error: 'Invalid player selection' })
+  try {
+    const playerA = await User.findOne({ id: playerAId })
+    const playerB = await User.findOne({ id: playerBId })
+    
+    if (!playerA || !playerB) {
+      return res.status(400).json({ error: 'Invalid player selection' })
+    }
+
+    // Determine winner and loser
+    const winnerId = playerAScore > playerBScore ? playerAId : playerBId
+    const loserId = winnerId === playerAId ? playerBId : playerAId
+    const winner = winnerId === playerA.id ? playerA : playerB
+    const loser = loserId === playerA.id ? playerA : playerB
+
+    // Calculate ELO changes
+    const K = 32
+    const expectedWinner = 1 / (1 + Math.pow(10, (loser.eloRating - winner.eloRating) / 400))
+    const winnerDelta = Math.round(K * (1 - expectedWinner))
+    const loserDelta = -winnerDelta
+
+    // Create match
+    const newMatch = new Match({
+      id: generateId(),
+      playerAId,
+      playerBId,
+      playerAScore,
+      playerBScore,
+      winnerId,
+      loserId,
+      matchType: matchType || 11,
+      winnerEloDelta: winnerDelta,
+      loserEloDelta: loserDelta,
+      createdAt: new Date()
+    })
+
+    await newMatch.save()
+
+    // Update winner stats
+    await User.updateOne(
+      { id: winnerId },
+      { $inc: { eloRating: winnerDelta, wins: 1 } }
+    )
+    
+    // Update loser stats
+    await User.updateOne(
+      { id: loserId },
+      { $inc: { eloRating: loserDelta, losses: 1 } }
+    )
+
+    res.status(201).json(newMatch)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create match' })
   }
-
-  // Determine winner and loser
-  const winnerId = playerAScore > playerBScore ? playerAId : playerBId
-  const loserId = winnerId === playerAId ? playerBId : playerAId
-  const winner = winnerId === playerA.id ? playerA : playerB
-  const loser = loserId === playerA.id ? playerA : playerB
-
-  // Calculate ELO changes
-  const K = 32
-  const expectedWinner = 1 / (1 + Math.pow(10, (loser.eloRating - winner.eloRating) / 400))
-  const winnerDelta = Math.round(K * (1 - expectedWinner))
-  const loserDelta = -winnerDelta
-
-  // Create match
-  const newMatch = {
-    id: generateId(),
-    playerAId,
-    playerBId,
-    playerAScore,
-    playerBScore,
-    winnerId,
-    loserId,
-    matchType: matchType || 11,
-    winnerEloDelta: winnerDelta,
-    loserEloDelta: loserDelta,
-    createdAt: new Date().toISOString()
-  }
-
-  // Update winner stats
-  const winnerIndex = users.findIndex(u => u.id === winnerId)
-  users[winnerIndex].eloRating += winnerDelta
-  users[winnerIndex].wins = (users[winnerIndex].wins || 0) + 1
-  
-  // Update loser stats
-  const loserIndex = users.findIndex(u => u.id === loserId)
-  users[loserIndex].eloRating += loserDelta
-  users[loserIndex].losses = (users[loserIndex].losses || 0) + 1
-
-  // Save to files
-  matches.push(newMatch)
-  writeMatches(matches)
-  writeUsers(users)
-
-  res.status(201).json(newMatch)
 })
 
-// Delete a match (password protected) - recalculates ratings
-app.delete('/api/matches/:id', (req, res) => {
+// Delete a match (password protected)
+app.delete('/api/matches/:id', async (req, res) => {
   const { id } = req.params
   const { password } = req.body || {}
   
-  // Check password
   if (password !== ADMIN_PASSWORD) {
     return res.status(403).json({ error: 'Invalid password' })
   }
 
-  const users = readUsers()
-  const matches = readMatches()
-  
-  const match = matches.find(m => m.id === id)
-  if (!match) {
-    return res.status(404).json({ error: 'Match not found' })
-  }
+  try {
+    const match = await Match.findOne({ id })
+    if (!match) {
+      return res.status(404).json({ error: 'Match not found' })
+    }
 
-  // Revert ELO and win/loss for winner
-  const winnerIndex = users.findIndex(u => u.id === match.winnerId)
-  if (winnerIndex !== -1) {
-    users[winnerIndex].eloRating -= match.winnerEloDelta
-    users[winnerIndex].wins = Math.max(0, (users[winnerIndex].wins || 0) - 1)
-  }
-  
-  // Revert ELO and win/loss for loser
-  const loserIndex = users.findIndex(u => u.id === match.loserId)
-  if (loserIndex !== -1) {
-    users[loserIndex].eloRating -= match.loserEloDelta
-    users[loserIndex].losses = Math.max(0, (users[loserIndex].losses || 0) - 1)
-  }
+    // Revert ELO and win/loss for winner
+    await User.updateOne(
+      { id: match.winnerId },
+      { $inc: { eloRating: -match.winnerEloDelta, wins: -1 } }
+    )
+    
+    // Revert ELO and win/loss for loser
+    await User.updateOne(
+      { id: match.loserId },
+      { $inc: { eloRating: -match.loserEloDelta, losses: -1 } }
+    )
 
-  // Remove match and save
-  const remainingMatches = matches.filter(m => m.id !== id)
-  writeMatches(remainingMatches)
-  writeUsers(users)
+    // Remove match
+    await Match.deleteOne({ id })
 
-  res.json({ success: true })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete match' })
+  }
 })
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  })
 })
 
-// Initialize and start server
-initDataFiles()
-app.listen(PORT, () => {
-  console.log(`🏓 Ping Pong server running on http://localhost:${PORT}`)
-  console.log(`📁 Users stored in: ${USERS_FILE}`)
-  console.log(`📁 Matches stored in: ${MATCHES_FILE}`)
-})
+// Catch-all route for SPA (production)
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    res.sendFile(join(__dirname, '../dist/index.html'))
+  })
+}
+
+// ============ Start Server ============
+
+async function startServer() {
+  try {
+    // Connect to MongoDB
+    console.log('🔌 Connecting to MongoDB...')
+    await mongoose.connect(MONGODB_URI)
+    console.log('✅ Connected to MongoDB')
+    
+    // Migrate data from JSON files if needed
+    await migrateFromJsonFiles()
+    
+    // Start Express server
+    app.listen(PORT, () => {
+      console.log(`🏓 Ping Pong server running on port ${PORT}`)
+      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`)
+    })
+  } catch (err) {
+    console.error('❌ Failed to start server:', err.message)
+    process.exit(1)
+  }
+}
+
+startServer()
