@@ -3,22 +3,20 @@
  * Displays player rankings with ELO and stats
  */
 
-import { useNavigate } from 'react-router-dom'
 import type { LeaderboardEntry } from '../../types'
 import { getRatingTier } from '../../lib/elo'
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[]
-  currentUserId?: string
+  onDeletePlayer?: (playerId: string, playerName: string) => void
+  onViewHistory?: (playerId: string, playerName: string) => void
 }
 
-export function LeaderboardTable({ entries, currentUserId }: LeaderboardTableProps) {
-  const navigate = useNavigate()
-
+export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: LeaderboardTableProps) {
   if (entries.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
-        <p>No players yet. Be the first to register!</p>
+        <p>No players yet. Add some players to get started!</p>
       </div>
     )
   }
@@ -28,15 +26,7 @@ export function LeaderboardTable({ entries, currentUserId }: LeaderboardTablePro
       {entries.map((entry, index) => (
         <div
           key={entry.user.id}
-          onClick={() => navigate(`/profile/${entry.user.id}`)}
-          className={`
-            flex items-center gap-3 p-3 rounded-xl cursor-pointer
-            transition-all duration-200 hover:scale-[1.02]
-            ${entry.user.id === currentUserId 
-              ? 'bg-accent/10 border border-accent/30' 
-              : 'bg-background-light border border-transparent hover:border-background-lighter'
-            }
-          `}
+          className="flex items-center gap-3 p-3 rounded-xl bg-background-light border border-transparent hover:border-background-lighter transition-all duration-200"
           style={{ animationDelay: `${index * 50}ms` }}
         >
           {/* Rank */}
@@ -50,11 +40,6 @@ export function LeaderboardTable({ entries, currentUserId }: LeaderboardTablePro
               <span className="font-semibold text-white truncate">
                 {entry.user.displayName}
               </span>
-              {entry.user.id === currentUserId && (
-                <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full">
-                  You
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-400">
               <span>{getRatingTier(entry.user.eloRating)}</span>
@@ -65,12 +50,38 @@ export function LeaderboardTable({ entries, currentUserId }: LeaderboardTablePro
           </div>
 
           {/* ELO and rank change */}
-          <div className="text-right">
+          <div className="text-right mr-1">
             <div className="font-display font-bold text-lg text-white">
               {entry.user.eloRating}
             </div>
             <RankChange change={entry.rankChange} />
           </div>
+
+          {/* View History button */}
+          {onViewHistory && (
+            <button
+              onClick={() => onViewHistory(entry.user.id, entry.user.displayName)}
+              className="p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-colors"
+              title="View match history"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          )}
+
+          {/* Delete button */}
+          {onDeletePlayer && (
+            <button
+              onClick={() => onDeletePlayer(entry.user.id, entry.user.displayName)}
+              className="p-2 text-gray-500 hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+              title="Delete player"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
         </div>
       ))}
     </div>
@@ -129,4 +140,3 @@ function RankChange({ change }: { change: number }) {
   }
   return <div className="text-xs text-gray-500">—</div>
 }
-

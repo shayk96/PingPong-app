@@ -1,0 +1,67 @@
+[
+  {
+    "id": "mkdrreyhoued1hl3y6e",
+    "playerAId": "demo1",
+    "playerBId": "demo2",
+    "playerAScore": 11,
+    "playerBScore": 3,
+    "winnerId": "demo1",
+    "loserId": "demo2",
+    "matchType": 11,
+    "winnerEloDelta": 13,
+    "loserEloDelta": -13,
+    "createdAt": "2026-01-14T08:39:05.849Z"
+  },
+  {
+    "id": "mkdrw09gk1o2h737kci",
+    "playerAId": "demo1",
+    "playerBId": "demo3",
+    "playerAScore": 2,
+    "playerBScore": 11,
+    "winnerId": "demo3",
+    "loserId": "demo1",
+    "matchType": 11,
+    "winnerEloDelta": 19,
+    "loserEloDelta": -19,
+    "createdAt": "2026-01-14T08:42:40.084Z"
+  },
+  {
+    "id": "mkdrwp9l7srhlv6f8zl",
+    "playerAId": "demo1",
+    "playerBId": "demo3",
+    "playerAScore": 11,
+    "playerBScore": 3,
+    "winnerId": "demo1",
+    "loserId": "demo3",
+    "matchType": 11,
+    "winnerEloDelta": 14,
+    "loserEloDelta": -14,
+    "createdAt": "2026-01-14T08:43:12.489Z"
+  },
+  {
+    "id": "mkdu82nm0sgg0aekvpm9",
+    "playerAId": "demo1",
+    "playerBId": "mkdrxiqk8o5ekye76q9",
+    "playerAScore": 11,
+    "playerBScore": 3,
+    "winnerId": "demo1",
+    "loserId": "mkdrxiqk8o5ekye76q9",
+    "matchType": 11,
+    "winnerEloDelta": 9,
+    "loserEloDelta": -9,
+    "createdAt": "2026-01-14T09:48:02.290Z"
+  },
+  {
+    "id": "mkdxtjmh3105yy8zfog",
+    "playerAId": "demo2",
+    "playerBId": "demo1",
+    "playerAScore": 1,
+    "playerBScore": 11,
+    "winnerId": "demo1",
+    "loserId": "demo2",
+    "matchType": 11,
+    "winnerEloDelta": 12,
+    "loserEloDelta": -12,
+    "createdAt": "2026-01-14T11:28:42.905Z"
+  }
+]

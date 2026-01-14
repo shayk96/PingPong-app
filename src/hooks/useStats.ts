@@ -96,33 +96,14 @@ export function usePlayerStats(
 
 /**
  * Calculate leaderboard with rankings and rank changes
+ * Uses stored wins/losses from player data
  */
 export function useLeaderboard(
   players: User[],
   matches: Match[]
 ): LeaderboardEntry[] {
   return useMemo(() => {
-    // Calculate wins/losses for each player
-    const statsMap = new Map<string, { wins: number; losses: number }>()
-    
-    for (const player of players) {
-      statsMap.set(player.id, { wins: 0, losses: 0 })
-    }
-    
-    for (const match of matches) {
-      const winnerStats = statsMap.get(match.winnerId)
-      const loserStats = statsMap.get(match.loserId)
-      
-      if (winnerStats) winnerStats.wins++
-      if (loserStats) loserStats.losses++
-    }
-
-    // Sort players by ELO rating (already sorted from usePlayers hook)
-    // But we need to recalculate rank changes based on recent matches
-    
-    // Calculate what rankings would be if we reversed the last match
-    // This is a simplified approach - for more accurate rank change tracking,
-    // you'd need to store historical rankings
+    // Sort players by ELO rating
     const sortedPlayers = [...players].sort((a, b) => b.eloRating - a.eloRating)
     
     // Get the most recent match to determine rank changes
@@ -131,19 +112,14 @@ export function useLeaderboard(
     )
     const lastMatch = recentMatches[0]
 
-    // Create leaderboard entries
+    // Create leaderboard entries using stored wins/losses
     const leaderboard: LeaderboardEntry[] = sortedPlayers.map((user, index) => {
-      const stats = statsMap.get(user.id) || { wins: 0, losses: 0 }
-      
       // Determine rank change based on last match
       let rankChange = 0
       if (lastMatch) {
-        // If this player was in the last match, they might have moved
         if (user.id === lastMatch.winnerId) {
-          // Winner might have moved up - estimate based on ELO delta
           rankChange = lastMatch.winnerEloDelta > 20 ? 1 : 0
         } else if (user.id === lastMatch.loserId) {
-          // Loser might have moved down
           rankChange = lastMatch.loserEloDelta < -20 ? -1 : 0
         }
       }
@@ -151,8 +127,8 @@ export function useLeaderboard(
       return {
         user,
         rank: index + 1,
-        wins: stats.wins,
-        losses: stats.losses,
+        wins: user.wins || 0,
+        losses: user.losses || 0,
         rankChange
       }
     })

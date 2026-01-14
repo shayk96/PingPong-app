@@ -5,9 +5,11 @@
 // User/Player types
 export interface User {
   id: string
-  email: string
+  email?: string
   displayName: string
   eloRating: number
+  wins: number
+  losses: number
   createdAt: Date
 }
 

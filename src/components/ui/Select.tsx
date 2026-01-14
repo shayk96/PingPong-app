@@ -14,14 +14,12 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
   error?: string
   options: SelectOption[]
-  placeholder?: string
 }
 
 export function Select({
   label,
   error,
   options,
-  placeholder = 'Select an option',
   className = '',
   ...props
 }: SelectProps) {
@@ -45,9 +43,6 @@ export function Select({
           `}
           {...props}
         >
-          <option value="" className="bg-background-light">
-            {placeholder}
-          </option>
           {options.map((option) => (
             <option 
               key={option.value} 

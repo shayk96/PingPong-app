@@ -1,11 +1,10 @@
 /**
  * Custom hook for fetching and managing players
- * Provides real-time updates via Firestore snapshots
+ * Uses API for data persistence
  */
 
-import { useState, useEffect } from 'react'
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
-import { db } from '../lib/firebase'
+import { useState, useEffect, useCallback } from 'react'
+import { fetchPlayers, createPlayer as apiCreatePlayer, deletePlayer as apiDeletePlayer } from '../lib/api'
 import type { User } from '../types'
 
 export function usePlayers() {
@@ -13,37 +12,40 @@ export function usePlayers() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    // Query all users, ordered by ELO rating (descending)
-    const q = query(
-      collection(db, 'users'),
-      orderBy('eloRating', 'desc')
-    )
-
-    // Subscribe to real-time updates
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const playerList: User[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          email: doc.data().email,
-          displayName: doc.data().displayName,
-          eloRating: doc.data().eloRating,
-          createdAt: doc.data().createdAt?.toDate() || new Date()
-        }))
-        setPlayers(playerList)
-        setLoading(false)
-      },
-      (err) => {
-        console.error('Error fetching players:', err)
-        setError('Failed to load players')
-        setLoading(false)
-      }
-    )
-
-    return () => unsubscribe()
+  const loadPlayers = useCallback(async () => {
+    try {
+      const data = await fetchPlayers()
+      // Convert date strings to Date objects and sort by ELO
+      const playerList = data.map((p: User & { createdAt: string }) => ({
+        ...p,
+        createdAt: new Date(p.createdAt)
+      })).sort((a: User, b: User) => b.eloRating - a.eloRating)
+      setPlayers(playerList)
+      setError(null)
+    } catch (err) {
+      console.error('Error fetching players:', err)
+      setError('Failed to load players')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  return { players, loading, error }
-}
+  useEffect(() => {
+    loadPlayers()
+  }, [loadPlayers])
 
+  const addPlayer = useCallback(async (displayName: string) => {
+    const newPlayer = await apiCreatePlayer(displayName)
+    await loadPlayers() // Refresh list
+    return newPlayer
+  }, [loadPlayers])
+
+  const deletePlayer = useCallback(async (playerId: string, password: string) => {
+    await apiDeletePlayer(playerId, password)
+    await loadPlayers() // Refresh list
+  }, [loadPlayers])
+
+  const refresh = loadPlayers
+
+  return { players, loading, error, addPlayer, deletePlayer, refresh }
+}

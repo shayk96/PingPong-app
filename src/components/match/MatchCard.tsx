@@ -10,7 +10,6 @@ interface MatchCardProps {
   match: Match
   playerA?: User
   playerB?: User
-  currentUserId?: string
   onDelete?: () => void
   canDelete?: boolean
 }
@@ -19,13 +18,10 @@ export function MatchCard({
   match,
   playerA,
   playerB,
-  currentUserId,
   onDelete,
   canDelete = false
 }: MatchCardProps) {
   const isPlayerAWinner = match.winnerId === match.playerAId
-  const isCurrentUserInMatch = currentUserId === match.playerAId || currentUserId === match.playerBId
-  const isCurrentUserWinner = currentUserId === match.winnerId
 
   // Format date
   const dateStr = match.createdAt.toLocaleDateString('en-US', {
@@ -36,15 +32,7 @@ export function MatchCard({
   })
 
   return (
-    <div className={`
-      bg-background-light rounded-xl p-4 border
-      ${isCurrentUserInMatch 
-        ? isCurrentUserWinner 
-          ? 'border-success/30' 
-          : 'border-error/30'
-        : 'border-background-lighter'
-      }
-    `}>
+    <div className="bg-background-light rounded-xl p-4 border border-background-lighter">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs text-gray-400">{dateStr}</span>

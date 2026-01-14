@@ -1,0 +1,42 @@
+[
+  {
+    "id": "demo1",
+    "displayName": "Alice",
+    "eloRating": 1179,
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "wins": 4,
+    "losses": 1
+  },
+  {
+    "id": "demo2",
+    "displayName": "Bob",
+    "eloRating": 1055,
+    "createdAt": "2024-01-02T00:00:00.000Z",
+    "wins": 0,
+    "losses": 2
+  },
+  {
+    "id": "demo3",
+    "displayName": "Charlie",
+    "eloRating": 1095,
+    "createdAt": "2024-01-03T00:00:00.000Z",
+    "wins": 1,
+    "losses": 1
+  },
+  {
+    "id": "mkdqyfu2hhpu88f1up",
+    "displayName": "Shay",
+    "eloRating": 1000,
+    "createdAt": "2026-01-14T08:16:33.962Z",
+    "wins": 0,
+    "losses": 0
+  },
+  {
+    "id": "mkdrxiqk8o5ekye76q9",
+    "displayName": "Rotem",
+    "eloRating": 991,
+    "wins": 0,
+    "losses": 1,
+    "createdAt": "2026-01-14T08:43:50.684Z"
+  }
+]
