@@ -10,6 +10,7 @@ import { useLeaderboard, useRecentMatchesWithPlayers } from '../hooks/useStats'
 import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { MatchCard } from '../components/match/MatchCard'
 import { Modal, Button, Input, ToastContainer, useToast } from '../components/ui'
+import type { User } from '../types'
 
 export default function Leaderboard() {
   const { players, loading: playersLoading, addPlayer, deletePlayer, refresh: refreshPlayers } = usePlayers()
@@ -42,7 +43,18 @@ export default function Leaderboard() {
   const [historyPlayerId, setHistoryPlayerId] = useState('')
   const [historyPlayerName, setHistoryPlayerName] = useState('')
 
+  // Head to Head modal state
+  const [showH2HModal, setShowH2HModal] = useState(false)
+  const [h2hPlayerA, setH2hPlayerA] = useState<User | null>(null)
+  const [h2hPlayerB, setH2hPlayerB] = useState<User | null>(null)
+
   const loading = playersLoading || matchesLoading
+
+  // Sort players alphabetically for selection
+  const sortedPlayers = useMemo(() => 
+    [...players].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    [players]
+  )
 
   // Get matches for selected player
   const playerMatches = useMemo(() => {
@@ -73,6 +85,28 @@ export default function Leaderboard() {
         : 0
     }
   }, [historyPlayerId, players])
+
+  // Get Head to Head matches and stats
+  const h2hData = useMemo(() => {
+    if (!h2hPlayerA || !h2hPlayerB) return null
+
+    const h2hMatches = matches
+      .filter(m => 
+        (m.playerAId === h2hPlayerA.id && m.playerBId === h2hPlayerB.id) ||
+        (m.playerAId === h2hPlayerB.id && m.playerBId === h2hPlayerA.id)
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+
+    const playerAWins = h2hMatches.filter(m => m.winnerId === h2hPlayerA.id).length
+    const playerBWins = h2hMatches.filter(m => m.winnerId === h2hPlayerB.id).length
+
+    return {
+      matches: h2hMatches,
+      playerAWins,
+      playerBWins,
+      total: h2hMatches.length
+    }
+  }, [h2hPlayerA, h2hPlayerB, matches])
 
   const handleAddPlayer = async () => {
     if (!newPlayerName.trim()) {
@@ -167,6 +201,24 @@ export default function Leaderboard() {
     showToast('Data refreshed!', 'success')
   }
 
+  const openH2HModal = () => {
+    setH2hPlayerA(null)
+    setH2hPlayerB(null)
+    setShowH2HModal(true)
+  }
+
+  const selectH2HPlayer = (player: User) => {
+    if (h2hPlayerA?.id === player.id) {
+      setH2hPlayerA(null)
+    } else if (h2hPlayerB?.id === player.id) {
+      setH2hPlayerB(null)
+    } else if (!h2hPlayerA) {
+      setH2hPlayerA(player)
+    } else if (!h2hPlayerB) {
+      setH2hPlayerB(player)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -202,11 +254,22 @@ export default function Leaderboard() {
               variant="primary"
               size="sm"
             >
-              + Add Player
+              + Add
             </Button>
           </div>
         </div>
       </header>
+
+      {/* Head to Head Button */}
+      {players.length >= 2 && (
+        <button
+          onClick={openH2HModal}
+          className="w-full mb-4 p-3 bg-gradient-to-r from-accent/20 to-primary/20 border border-accent/30 rounded-xl text-white font-medium flex items-center justify-center gap-2 hover:from-accent/30 hover:to-primary/30 transition-all"
+        >
+          <span>⚔️</span>
+          <span>Head to Head</span>
+        </button>
+      )}
 
       {/* Rankings */}
       {players.length > 0 && (
@@ -476,6 +539,149 @@ export default function Leaderboard() {
           <Button
             variant="secondary"
             onClick={() => setShowHistoryModal(false)}
+            className="w-full"
+          >
+            Close
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Head to Head Modal */}
+      <Modal
+        isOpen={showH2HModal}
+        onClose={() => setShowH2HModal(false)}
+        title="Head to Head"
+      >
+        <div className="space-y-4">
+          {/* Selected Players Display */}
+          <div className="grid grid-cols-2 gap-3">
+            <div 
+              className={`p-4 rounded-xl border-2 border-dashed text-center transition-all ${
+                h2hPlayerA 
+                  ? 'border-accent bg-accent/10' 
+                  : 'border-background-lighter'
+              }`}
+            >
+              {h2hPlayerA ? (
+                <div>
+                  <div className="text-white font-semibold">{h2hPlayerA.displayName}</div>
+                  <div className="text-xs text-gray-400">{h2hPlayerA.eloRating} ELO</div>
+                </div>
+              ) : (
+                <div className="text-gray-500 text-sm">Player 1</div>
+              )}
+            </div>
+            <div 
+              className={`p-4 rounded-xl border-2 border-dashed text-center transition-all ${
+                h2hPlayerB 
+                  ? 'border-accent bg-accent/10' 
+                  : 'border-background-lighter'
+              }`}
+            >
+              {h2hPlayerB ? (
+                <div>
+                  <div className="text-white font-semibold">{h2hPlayerB.displayName}</div>
+                  <div className="text-xs text-gray-400">{h2hPlayerB.eloRating} ELO</div>
+                </div>
+              ) : (
+                <div className="text-gray-500 text-sm">Player 2</div>
+              )}
+            </div>
+          </div>
+
+          {/* Player Grid */}
+          <div className="grid grid-cols-3 gap-2">
+            {sortedPlayers.map((player) => {
+              const isSelectedA = h2hPlayerA?.id === player.id
+              const isSelectedB = h2hPlayerB?.id === player.id
+              const isSelected = isSelectedA || isSelectedB
+              
+              return (
+                <button
+                  key={player.id}
+                  type="button"
+                  onClick={() => selectH2HPlayer(player)}
+                  className={`p-3 rounded-xl text-sm font-medium transition-all ${
+                    isSelected
+                      ? 'bg-accent text-white'
+                      : 'bg-background text-gray-300 hover:bg-background-lighter'
+                  }`}
+                >
+                  {player.displayName}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* H2H Stats & Matches */}
+          {h2hData && h2hPlayerA && h2hPlayerB && (
+            <>
+              {/* Score Summary */}
+              <div className="bg-background rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-center flex-1">
+                    <div className={`text-3xl font-bold ${h2hData.playerAWins > h2hData.playerBWins ? 'text-success' : 'text-white'}`}>
+                      {h2hData.playerAWins}
+                    </div>
+                    <div className="text-sm text-gray-400">{h2hPlayerA.displayName}</div>
+                  </div>
+                  <div className="text-gray-500 text-xl px-4">-</div>
+                  <div className="text-center flex-1">
+                    <div className={`text-3xl font-bold ${h2hData.playerBWins > h2hData.playerAWins ? 'text-success' : 'text-white'}`}>
+                      {h2hData.playerBWins}
+                    </div>
+                    <div className="text-sm text-gray-400">{h2hPlayerB.displayName}</div>
+                  </div>
+                </div>
+                <div className="text-center text-xs text-gray-500 mt-2">
+                  {h2hData.total} match{h2hData.total !== 1 ? 'es' : ''} played
+                </div>
+              </div>
+
+              {/* Match List */}
+              <div className="max-h-48 overflow-y-auto space-y-2">
+                {h2hData.matches.length > 0 ? (
+                  h2hData.matches.map((match) => {
+                    const aIsPlayerA = match.playerAId === h2hPlayerA.id
+                    const scoreA = aIsPlayerA ? match.playerAScore : match.playerBScore
+                    const scoreB = aIsPlayerA ? match.playerBScore : match.playerAScore
+                    const winnerIsA = match.winnerId === h2hPlayerA.id
+
+                    return (
+                      <div
+                        key={match.id}
+                        className="p-3 rounded-xl bg-background-lighter flex items-center justify-between"
+                      >
+                        <div className="text-xs text-gray-400">
+                          {match.createdAt.toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold ${winnerIsA ? 'text-success' : 'text-gray-400'}`}>
+                            {scoreA}
+                          </span>
+                          <span className="text-gray-500">-</span>
+                          <span className={`font-bold ${!winnerIsA ? 'text-success' : 'text-gray-400'}`}>
+                            {scoreB}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="text-center py-6 text-gray-400">
+                    <p>No matches between these players yet</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          <Button
+            variant="secondary"
+            onClick={() => setShowH2HModal(false)}
             className="w-full"
           >
             Close
