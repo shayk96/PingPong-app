@@ -68,6 +68,37 @@ function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }
 
+// ============ Enhanced ELO Calculation ============
+
+/**
+ * Get K-factor based on number of games played
+ * New players have more volatile ratings, experienced players are more stable
+ */
+function getKFactor(gamesPlayed) {
+  if (gamesPlayed < 10) return 40  // New player - high volatility
+  if (gamesPlayed < 30) return 32  // Intermediate - standard
+  return 24                         // Experienced - more stable
+}
+
+/**
+ * Calculate margin multiplier based on score difference
+ * Winning by more points gives a bonus
+ */
+function getMarginMultiplier(winnerScore, loserScore) {
+  const pointDifference = winnerScore - loserScore
+  // Minimum difference is 2 (must win by 2 in ping pong)
+  // Each additional point adds 0.05 to the multiplier
+  // Example: win by 2 = 1.0, win by 6 = 1.2, win by 10 = 1.4, win by 11 = 1.45
+  return 1 + Math.max(0, (pointDifference - 2)) * 0.05
+}
+
+/**
+ * Calculate expected score (probability of winning)
+ */
+function expectedScore(playerRating, opponentRating) {
+  return 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400))
+}
+
 // ============ Data Migration from JSON files ============
 
 async function migrateFromJsonFiles() {
@@ -250,12 +281,26 @@ app.post('/api/matches', async (req, res) => {
     const loserId = winnerId === playerAId ? playerBId : playerAId
     const winner = winnerId === playerA.id ? playerA : playerB
     const loser = loserId === playerA.id ? playerA : playerB
+    const winnerScore = winnerId === playerAId ? playerAScore : playerBScore
+    const loserScore = loserId === playerAId ? playerAScore : playerBScore
 
-    // Calculate ELO changes
-    const K = 32
-    const expectedWinner = 1 / (1 + Math.pow(10, (loser.eloRating - winner.eloRating) / 400))
-    const winnerDelta = Math.round(K * (1 - expectedWinner))
-    const loserDelta = -winnerDelta
+    // Calculate games played for each player
+    const winnerGamesPlayed = winner.wins + winner.losses
+    const loserGamesPlayed = loser.wins + loser.losses
+
+    // Get K-factors based on experience
+    const winnerK = getKFactor(winnerGamesPlayed)
+    const loserK = getKFactor(loserGamesPlayed)
+
+    // Get margin multiplier based on score difference
+    const marginMult = getMarginMultiplier(winnerScore, loserScore)
+
+    // Calculate ELO changes with enhanced formula
+    const expWinner = expectedScore(winner.eloRating, loser.eloRating)
+    const expLoser = expectedScore(loser.eloRating, winner.eloRating)
+    
+    const winnerDelta = Math.round(winnerK * marginMult * (1 - expWinner))
+    const loserDelta = Math.round(loserK * marginMult * (0 - expLoser))
 
     // Create match
     const newMatch = new Match({
