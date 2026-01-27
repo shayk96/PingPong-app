@@ -43,7 +43,8 @@ const userSchema = new mongoose.Schema({
   eloRating: { type: Number, default: 800 },
   wins: { type: Number, default: 0 },
   losses: { type: Number, default: 0 },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  lastPlayedAt: { type: Date, default: Date.now } // Track last activity
 })
 
 const matchSchema = new mongoose.Schema({
@@ -66,6 +67,39 @@ const Match = mongoose.model('Match', matchSchema)
 // Generate unique ID
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
+}
+
+// ============ Inactivity Settings ============
+
+const INACTIVITY_GRACE_DAYS = 14 // Days before player is hidden
+const INACTIVITY_PENALTY_PER_DAY = 7 // ELO penalty per day of inactivity
+
+/**
+ * Calculate inactivity penalty for a player returning after being inactive
+ * Penalty is applied from day 1, not after grace period
+ */
+function calculateInactivityPenalty(lastPlayedAt) {
+  if (!lastPlayedAt) return 0
+  
+  const now = new Date()
+  const daysSinceLastPlayed = Math.floor((now - new Date(lastPlayedAt)) / (1000 * 60 * 60 * 24))
+  
+  // Only apply penalty if player was inactive
+  if (daysSinceLastPlayed <= 0) return 0
+  
+  return daysSinceLastPlayed * INACTIVITY_PENALTY_PER_DAY
+}
+
+/**
+ * Check if player should be hidden (inactive for more than grace period)
+ */
+function isPlayerInactive(lastPlayedAt) {
+  if (!lastPlayedAt) return false
+  
+  const now = new Date()
+  const daysSinceLastPlayed = Math.floor((now - new Date(lastPlayedAt)) / (1000 * 60 * 60 * 24))
+  
+  return daysSinceLastPlayed > INACTIVITY_GRACE_DAYS
 }
 
 // ============ Enhanced ELO Calculation ============
@@ -175,7 +209,8 @@ app.post('/api/players', async (req, res) => {
       eloRating: 800,
       wins: 0,
       losses: 0,
-      createdAt: new Date()
+      createdAt: new Date(),
+      lastPlayedAt: new Date() // Start fresh, no inactivity penalty
     })
 
     await newPlayer.save()
@@ -276,6 +311,24 @@ app.post('/api/matches', async (req, res) => {
       return res.status(400).json({ error: 'Invalid player selection' })
     }
 
+    // Apply inactivity penalties before calculating match results
+    const playerAPenalty = calculateInactivityPenalty(playerA.lastPlayedAt)
+    const playerBPenalty = calculateInactivityPenalty(playerB.lastPlayedAt)
+    
+    // Apply penalties if any
+    if (playerAPenalty > 0) {
+      const newRating = Math.max(100, playerA.eloRating - playerAPenalty)
+      await User.updateOne({ id: playerAId }, { eloRating: newRating })
+      playerA.eloRating = newRating
+      console.log(`📉 Applied inactivity penalty to ${playerA.displayName}: -${playerAPenalty} ELO`)
+    }
+    if (playerBPenalty > 0) {
+      const newRating = Math.max(100, playerB.eloRating - playerBPenalty)
+      await User.updateOne({ id: playerBId }, { eloRating: newRating })
+      playerB.eloRating = newRating
+      console.log(`📉 Applied inactivity penalty to ${playerB.displayName}: -${playerBPenalty} ELO`)
+    }
+
     // Determine winner and loser
     const winnerId = playerAScore > playerBScore ? playerAId : playerBId
     const loserId = winnerId === playerAId ? playerBId : playerAId
@@ -295,7 +348,7 @@ app.post('/api/matches', async (req, res) => {
     // Get margin multiplier based on score difference
     const marginMult = getMarginMultiplier(winnerScore, loserScore)
 
-    // Calculate ELO changes with enhanced formula
+    // Calculate ELO changes with enhanced formula (using post-penalty ratings)
     const expWinner = expectedScore(winner.eloRating, loser.eloRating)
     const expLoser = expectedScore(loser.eloRating, winner.eloRating)
     
@@ -319,16 +372,18 @@ app.post('/api/matches', async (req, res) => {
 
     await newMatch.save()
 
-    // Update winner stats
+    const now = new Date()
+
+    // Update winner stats and lastPlayedAt
     await User.updateOne(
       { id: winnerId },
-      { $inc: { eloRating: winnerDelta, wins: 1 } }
+      { $inc: { eloRating: winnerDelta, wins: 1 }, $set: { lastPlayedAt: now } }
     )
     
-    // Update loser stats
+    // Update loser stats and lastPlayedAt
     await User.updateOne(
       { id: loserId },
-      { $inc: { eloRating: loserDelta, losses: 1 } }
+      { $inc: { eloRating: loserDelta, losses: 1 }, $set: { lastPlayedAt: now } }
     )
 
     res.status(201).json(newMatch)

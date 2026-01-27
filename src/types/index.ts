@@ -11,6 +11,7 @@ export interface User {
   wins: number
   losses: number
   createdAt: Date
+  lastPlayedAt?: Date // Track when player last played a match
 }
 
 export interface UserStats {

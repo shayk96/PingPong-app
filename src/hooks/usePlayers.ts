@@ -16,9 +16,10 @@ export function usePlayers() {
     try {
       const data = await fetchPlayers()
       // Convert date strings to Date objects and sort by ELO
-      const playerList = data.map((p: User & { createdAt: string }) => ({
+      const playerList = data.map((p: User & { createdAt: string; lastPlayedAt?: string }) => ({
         ...p,
-        createdAt: new Date(p.createdAt)
+        createdAt: new Date(p.createdAt),
+        lastPlayedAt: p.lastPlayedAt ? new Date(p.lastPlayedAt) : undefined
       })).sort((a: User, b: User) => b.eloRating - a.eloRating)
       setPlayers(playerList)
       setError(null)

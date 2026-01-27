@@ -97,19 +97,38 @@ export function usePlayerStats(
 // Minimum games required for established ranking
 const MIN_GAMES_FOR_RANKING = 5
 
+// Inactivity settings (must match server)
+const INACTIVITY_GRACE_DAYS = 14
+
+/**
+ * Check if player is inactive (hasn't played in more than grace period)
+ */
+function isPlayerInactive(lastPlayedAt: Date | undefined): boolean {
+  if (!lastPlayedAt) return false
+  
+  const now = new Date()
+  const daysSinceLastPlayed = Math.floor((now.getTime() - new Date(lastPlayedAt).getTime()) / (1000 * 60 * 60 * 24))
+  
+  return daysSinceLastPlayed > INACTIVITY_GRACE_DAYS
+}
+
 /**
  * Calculate leaderboard with rankings and rank changes
  * Uses stored wins/losses from player data
  * Players with < 5 games are marked as provisional and shown at the bottom
+ * Inactive players (no games in 14+ days) are hidden
  */
 export function useLeaderboard(
   players: User[],
   matches: Match[]
 ): LeaderboardEntry[] {
   return useMemo(() => {
+    // Filter out inactive players (haven't played in more than 14 days)
+    const activePlayers = players.filter(p => !isPlayerInactive(p.lastPlayedAt))
+    
     // Separate established and provisional players
-    const establishedPlayers = players.filter(p => (p.wins + p.losses) >= MIN_GAMES_FOR_RANKING)
-    const provisionalPlayers = players.filter(p => (p.wins + p.losses) < MIN_GAMES_FOR_RANKING)
+    const establishedPlayers = activePlayers.filter(p => (p.wins + p.losses) >= MIN_GAMES_FOR_RANKING)
+    const provisionalPlayers = activePlayers.filter(p => (p.wins + p.losses) < MIN_GAMES_FOR_RANKING)
     
     // Sort each group by ELO rating
     establishedPlayers.sort((a, b) => b.eloRating - a.eloRating)
