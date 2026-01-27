@@ -40,7 +40,7 @@ if (process.env.NODE_ENV === 'production') {
 const userSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   displayName: { type: String, required: true },
-  eloRating: { type: Number, default: 1000 },
+  eloRating: { type: Number, default: 800 },
   wins: { type: Number, default: 0 },
   losses: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
@@ -172,7 +172,7 @@ app.post('/api/players', async (req, res) => {
     const newPlayer = new User({
       id: generateId(),
       displayName: displayName.trim(),
-      eloRating: 1000,
+      eloRating: 800,
       wins: 0,
       losses: 0,
       createdAt: new Date()

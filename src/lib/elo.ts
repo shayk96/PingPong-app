@@ -6,7 +6,7 @@
  * for ping pong matches.
  * 
  * Key concepts:
- * - Each player has a numerical rating (starting at 1000)
+ * - Each player has a numerical rating (starting at 800)
  * - When players compete, ratings are updated based on the outcome
  * - Beating a higher-rated player rewards more points than beating a lower-rated one
  * - The K-factor determines how much ratings change per match
