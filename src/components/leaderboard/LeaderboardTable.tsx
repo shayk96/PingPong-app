@@ -36,18 +36,18 @@ export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: Lea
 
           {/* Player info */}
           <div className="flex-1 min-w-0">
+            <div className={`font-semibold truncate ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
+              {entry.user.displayName}
+            </div>
             <div className="flex items-center gap-2">
-              <span className={`font-semibold truncate ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
-                {entry.user.displayName}
+              <span className="text-xs text-yellow-400">
+                {getRatingTier(entry.user.eloRating)}
               </span>
               {entry.isProvisional && (
                 <span className="text-[10px] px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded-full whitespace-nowrap">
                   Provisional
                 </span>
               )}
-            </div>
-            <div className="text-xs text-yellow-400">
-              {getRatingTier(entry.user.eloRating)}
             </div>
           </div>
 
