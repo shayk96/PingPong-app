@@ -94,17 +94,29 @@ export function usePlayerStats(
   }, [playerId, matches, players])
 }
 
+// Minimum games required for established ranking
+const MIN_GAMES_FOR_RANKING = 5
+
 /**
  * Calculate leaderboard with rankings and rank changes
  * Uses stored wins/losses from player data
+ * Players with < 5 games are marked as provisional and shown at the bottom
  */
 export function useLeaderboard(
   players: User[],
   matches: Match[]
 ): LeaderboardEntry[] {
   return useMemo(() => {
-    // Sort players by ELO rating
-    const sortedPlayers = [...players].sort((a, b) => b.eloRating - a.eloRating)
+    // Separate established and provisional players
+    const establishedPlayers = players.filter(p => (p.wins + p.losses) >= MIN_GAMES_FOR_RANKING)
+    const provisionalPlayers = players.filter(p => (p.wins + p.losses) < MIN_GAMES_FOR_RANKING)
+    
+    // Sort each group by ELO rating
+    establishedPlayers.sort((a, b) => b.eloRating - a.eloRating)
+    provisionalPlayers.sort((a, b) => b.eloRating - a.eloRating)
+    
+    // Combine: established first, then provisional
+    const sortedPlayers = [...establishedPlayers, ...provisionalPlayers]
     
     // Get the most recent match to determine rank changes
     const recentMatches = [...matches].sort(
@@ -114,6 +126,9 @@ export function useLeaderboard(
 
     // Create leaderboard entries using stored wins/losses
     const leaderboard: LeaderboardEntry[] = sortedPlayers.map((user, index) => {
+      const totalGames = (user.wins || 0) + (user.losses || 0)
+      const isProvisional = totalGames < MIN_GAMES_FOR_RANKING
+      
       // Determine rank change based on last match
       let rankChange = 0
       if (lastMatch) {
@@ -129,7 +144,8 @@ export function useLeaderboard(
         rank: index + 1,
         wins: user.wins || 0,
         losses: user.losses || 0,
-        rankChange
+        rankChange,
+        isProvisional
       }
     })
 

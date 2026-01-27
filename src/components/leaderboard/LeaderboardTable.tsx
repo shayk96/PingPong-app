@@ -31,13 +31,20 @@ export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: Lea
         >
           {/* Rank */}
           <div className="w-9 flex-shrink-0">
-            <RankBadge rank={entry.rank} />
+            <RankBadge rank={entry.rank} isProvisional={entry.isProvisional} />
           </div>
 
           {/* Player info */}
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-white truncate">
-              {entry.user.displayName}
+            <div className="flex items-center gap-2">
+              <span className={`font-semibold truncate ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
+                {entry.user.displayName}
+              </span>
+              {entry.isProvisional && (
+                <span className="text-[10px] px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded-full whitespace-nowrap">
+                  Provisional
+                </span>
+              )}
             </div>
             <div className="text-xs text-yellow-400">
               {getRatingTier(entry.user.eloRating)}
@@ -91,7 +98,16 @@ export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: Lea
   )
 }
 
-function RankBadge({ rank }: { rank: number }) {
+function RankBadge({ rank, isProvisional }: { rank: number; isProvisional?: boolean }) {
+  // Provisional players get a muted badge with "?" or just grayed out
+  if (isProvisional) {
+    return (
+      <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-sm font-medium text-gray-500">
+        -
+      </div>
+    )
+  }
+  
   if (rank === 1) {
     return (
       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-sm font-bold text-yellow-900 shadow-lg shadow-yellow-500/30">

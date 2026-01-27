@@ -65,6 +65,7 @@ export interface LeaderboardEntry {
   losses: number
   previousRank?: number
   rankChange: number // positive = moved up, negative = moved down, 0 = no change
+  isProvisional: boolean // true if player has < 5 games
 }
 
 // Match with player details for display
