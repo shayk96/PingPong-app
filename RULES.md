@@ -28,13 +28,15 @@ A competitive ping pong tracking app with an ELO-based ranking system. Track mat
 - Losing to a lower-rated player = more points lost
 
 #### 2. Experience Factor (K-Factor)
-Your rating volatility depends on how many games you've played:
+The K-factor determines how much ratings can change. When two players compete, their K-factors are **averaged** for a symmetric calculation (winner gains exactly what loser loses):
 
 | Games Played | K-Factor | Meaning |
 |--------------|----------|---------|
 | 0-9 games | 40 | High volatility (new player) |
 | 10-29 games | 32 | Standard volatility |
 | 30+ games | 24 | Stable rating (experienced) |
+
+**Symmetric ELO**: Winner gains exactly what loser loses. For example, if the calculated change is 20 points, winner gets +20 and loser gets -20.
 
 #### 3. Score Margin Bonus
 Winning by more points gives a bonus multiplier:

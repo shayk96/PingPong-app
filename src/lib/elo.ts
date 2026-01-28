@@ -97,24 +97,23 @@ export function calculateElo(
   winnerScore?: number,
   loserScore?: number
 ): EloResult {
-  // Calculate expected scores
+  // Calculate expected score for winner
   const expectedWinner = expectedScore(winnerRating, loserRating)
-  const expectedLoser = expectedScore(loserRating, winnerRating)
   
-  // Get K-factors based on games played
+  // Get K-factors based on games played - use average for symmetric calculation
   const winnerK = getKFactor(winnerGamesPlayed)
   const loserK = getKFactor(loserGamesPlayed)
+  const avgK = (winnerK + loserK) / 2
   
   // Get margin multiplier (if scores provided)
   const marginMult = (winnerScore !== undefined && loserScore !== undefined) 
     ? getMarginMultiplier(winnerScore, loserScore) 
     : 1.0
   
-  // Calculate rating changes
-  // Winner's actual score is 1, loser's is 0
-  // Apply margin multiplier to both
-  const winnerDelta = Math.round(winnerK * marginMult * (1 - expectedWinner))
-  const loserDelta = Math.round(loserK * marginMult * (0 - expectedLoser))
+  // Calculate rating changes - SYMMETRIC: winner gains exactly what loser loses
+  const delta = Math.round(avgK * marginMult * (1 - expectedWinner))
+  const winnerDelta = delta
+  const loserDelta = -delta
   
   // Calculate new ratings (with minimum floor)
   const newWinnerRating = Math.max(MIN_RATING, winnerRating + winnerDelta)

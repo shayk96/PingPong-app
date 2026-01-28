@@ -341,19 +341,20 @@ app.post('/api/matches', async (req, res) => {
     const winnerGamesPlayed = winner.wins + winner.losses
     const loserGamesPlayed = loser.wins + loser.losses
 
-    // Get K-factors based on experience
+    // Get K-factors based on experience - use average for symmetric calculation
     const winnerK = getKFactor(winnerGamesPlayed)
     const loserK = getKFactor(loserGamesPlayed)
+    const avgK = (winnerK + loserK) / 2
 
     // Get margin multiplier based on score difference
     const marginMult = getMarginMultiplier(winnerScore, loserScore)
 
-    // Calculate ELO changes with enhanced formula (using post-penalty ratings)
+    // Calculate ELO changes - SYMMETRIC: winner gains exactly what loser loses
     const expWinner = expectedScore(winner.eloRating, loser.eloRating)
-    const expLoser = expectedScore(loser.eloRating, winner.eloRating)
     
-    const winnerDelta = Math.round(winnerK * marginMult * (1 - expWinner))
-    const loserDelta = Math.round(loserK * marginMult * (0 - expLoser))
+    const delta = Math.round(avgK * marginMult * (1 - expWinner))
+    const winnerDelta = delta
+    const loserDelta = -delta
 
     // Create match
     const newMatch = new Match({
