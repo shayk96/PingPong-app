@@ -497,6 +497,82 @@ app.get('/api/health', (req, res) => {
   })
 })
 
+// List ELO backups
+app.get('/api/backups', async (req, res) => {
+  try {
+    const backups = await EloBackup.find()
+      .select('backupId createdAt')
+      .sort({ createdAt: -1 })
+    res.json(backups)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch backups' })
+  }
+})
+
+// Restore from a backup (password protected)
+app.post('/api/backups/:backupId/restore', async (req, res) => {
+  const { backupId } = req.params
+  const { password } = req.body || {}
+  
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ error: 'Invalid password' })
+  }
+  
+  try {
+    const success = await restoreEloBackup(backupId)
+    
+    if (success) {
+      // Also rebuild ELO history after restore
+      await EloHistory.deleteMany({})
+      
+      const players = await User.find()
+      const matches = await Match.find().sort({ createdAt: 1 })
+      
+      const playerElos = {}
+      const historyEntries = []
+      
+      for (const player of players) {
+        playerElos[player.id] = 800
+        historyEntries.push({
+          playerId: player.id,
+          eloRating: 800,
+          matchId: null,
+          timestamp: player.createdAt || new Date('2024-01-01')
+        })
+      }
+      
+      for (const match of matches) {
+        if (playerElos[match.winnerId] !== undefined) {
+          playerElos[match.winnerId] += match.winnerEloDelta
+          historyEntries.push({
+            playerId: match.winnerId,
+            eloRating: playerElos[match.winnerId],
+            matchId: match.id,
+            timestamp: match.createdAt
+          })
+        }
+        if (playerElos[match.loserId] !== undefined) {
+          playerElos[match.loserId] += match.loserEloDelta
+          historyEntries.push({
+            playerId: match.loserId,
+            eloRating: playerElos[match.loserId],
+            matchId: match.id,
+            timestamp: match.createdAt
+          })
+        }
+      }
+      
+      await EloHistory.insertMany(historyEntries)
+      
+      res.json({ success: true, message: 'ELO restored from backup' })
+    } else {
+      res.status(404).json({ error: 'Backup not found' })
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to restore backup' })
+  }
+})
+
 // Catch-all route for SPA (production)
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
@@ -504,41 +580,162 @@ if (process.env.NODE_ENV === 'production') {
   })
 }
 
-// ============ ELO History Migration ============
+// ============ ELO Backup Schema ============
+
+const eloBackupSchema = new mongoose.Schema({
+  backupId: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+  players: [{
+    id: String,
+    displayName: String,
+    eloRating: Number,
+    wins: Number,
+    losses: Number,
+    lastPlayedAt: Date
+  }],
+  matchDeltas: [{
+    matchId: String,
+    winnerEloDelta: Number,
+    loserEloDelta: Number
+  }]
+})
+
+const EloBackup = mongoose.model('EloBackup', eloBackupSchema)
+
+// ============ ELO Recalculation ============
 
 /**
- * Reconstruct ELO history from all existing matches
- * This creates a complete history by replaying all matches in order
+ * Create a backup of current ELO state before recalculation
  */
-async function migrateEloHistory() {
+async function createEloBackup() {
   try {
-    // Check if we already have substantial history
-    const historyCount = await EloHistory.countDocuments()
-    const matchCount = await Match.countDocuments()
+    const backupId = `backup_${Date.now()}`
     
-    // If we have more history entries than matches, we've likely already migrated
-    // (each match creates 2 entries + 1 initial per player)
-    if (historyCount > matchCount) {
-      console.log('📈 ELO history already exists, skipping migration')
-      return
+    // Get all current player states
+    const players = await User.find()
+    const playerBackups = players.map(p => ({
+      id: p.id,
+      displayName: p.displayName,
+      eloRating: p.eloRating,
+      wins: p.wins,
+      losses: p.losses,
+      lastPlayedAt: p.lastPlayedAt
+    }))
+    
+    // Get all match deltas
+    const matches = await Match.find()
+    const matchDeltas = matches.map(m => ({
+      matchId: m.id,
+      winnerEloDelta: m.winnerEloDelta,
+      loserEloDelta: m.loserEloDelta
+    }))
+    
+    // Save backup
+    const backup = new EloBackup({
+      backupId,
+      createdAt: new Date(),
+      players: playerBackups,
+      matchDeltas: matchDeltas
+    })
+    
+    await backup.save()
+    console.log(`💾 Created ELO backup: ${backupId}`)
+    
+    return backupId
+  } catch (err) {
+    console.error('Error creating backup:', err.message)
+    return null
+  }
+}
+
+/**
+ * Restore ELO from a backup
+ */
+async function restoreEloBackup(backupId) {
+  try {
+    const backup = await EloBackup.findOne({ backupId })
+    
+    if (!backup) {
+      console.error(`Backup not found: ${backupId}`)
+      return false
     }
     
-    console.log('📈 Reconstructing ELO history from existing matches...')
+    console.log(`🔄 Restoring ELO from backup: ${backupId}`)
     
-    // Clear existing history to rebuild from scratch
-    await EloHistory.deleteMany({})
+    // Restore player states
+    for (const player of backup.players) {
+      await User.updateOne(
+        { id: player.id },
+        {
+          eloRating: player.eloRating,
+          wins: player.wins,
+          losses: player.losses,
+          lastPlayedAt: player.lastPlayedAt
+        }
+      )
+    }
+    
+    // Restore match deltas
+    for (const match of backup.matchDeltas) {
+      await Match.updateOne(
+        { id: match.matchId },
+        {
+          winnerEloDelta: match.winnerEloDelta,
+          loserEloDelta: match.loserEloDelta
+        }
+      )
+    }
+    
+    console.log(`✅ Restored ${backup.players.length} players from backup`)
+    return true
+  } catch (err) {
+    console.error('Error restoring backup:', err.message)
+    return false
+  }
+}
+
+/**
+ * Completely recalculate all ELO ratings from scratch
+ * - Resets all players to 800 ELO with 0 wins/losses
+ * - Replays all matches in chronological order using current formula
+ * - Updates match deltas and rebuilds ELO history
+ */
+async function recalculateAllElo() {
+  try {
+    // Create backup before recalculating
+    const backupId = await createEloBackup()
+    if (backupId) {
+      console.log(`💾 Backup created. To restore, use backupId: ${backupId}`)
+    }
+    
+    console.log('🔄 Recalculating all ELO ratings from scratch...')
     
     // Get all players and matches
     const players = await User.find()
     const matches = await Match.find().sort({ createdAt: 1 }) // Oldest first
     
-    // Track each player's ELO over time (start at 800)
-    const playerElos = {}
+    if (matches.length === 0) {
+      console.log('📊 No matches to recalculate')
+      return
+    }
+    
+    // Clear existing ELO history
+    await EloHistory.deleteMany({})
+    
+    // Track each player's state
+    const playerState = {}
     const historyEntries = []
     
-    // Create initial entries for all players
+    // Reset all players to initial state
     for (const player of players) {
-      playerElos[player.id] = 800
+      playerState[player.id] = {
+        eloRating: 800,
+        wins: 0,
+        losses: 0,
+        lastPlayedAt: player.createdAt || new Date()
+      }
+      
+      // Add initial ELO history entry
       historyEntries.push({
         playerId: player.id,
         eloRating: 800,
@@ -552,36 +749,89 @@ async function migrateEloHistory() {
       const winnerId = match.winnerId
       const loserId = match.loserId
       
-      // Apply the deltas that were recorded in the match
-      if (playerElos[winnerId] !== undefined) {
-        playerElos[winnerId] += match.winnerEloDelta
-        historyEntries.push({
-          playerId: winnerId,
-          eloRating: playerElos[winnerId],
-          matchId: match.id,
-          timestamp: match.createdAt
-        })
-      }
+      // Skip if players don't exist
+      if (!playerState[winnerId] || !playerState[loserId]) continue
       
-      if (playerElos[loserId] !== undefined) {
-        playerElos[loserId] += match.loserEloDelta
-        historyEntries.push({
-          playerId: loserId,
-          eloRating: playerElos[loserId],
-          matchId: match.id,
-          timestamp: match.createdAt
-        })
-      }
+      const winner = playerState[winnerId]
+      const loser = playerState[loserId]
+      
+      // Get scores from match
+      const winnerScore = match.playerAId === winnerId ? match.playerAScore : match.playerBScore
+      const loserScore = match.playerAId === loserId ? match.playerAScore : match.playerBScore
+      
+      // Calculate games played at time of match
+      const winnerGamesPlayed = winner.wins + winner.losses
+      const loserGamesPlayed = loser.wins + loser.losses
+      
+      // Get K-factors - use average for symmetric calculation
+      const winnerK = getKFactor(winnerGamesPlayed)
+      const loserK = getKFactor(loserGamesPlayed)
+      const avgK = (winnerK + loserK) / 2
+      
+      // Get margin multiplier
+      const marginMult = getMarginMultiplier(winnerScore, loserScore)
+      
+      // Calculate ELO changes - SYMMETRIC
+      const expWinner = expectedScore(winner.eloRating, loser.eloRating)
+      const delta = Math.round(avgK * marginMult * (1 - expWinner))
+      
+      // Update player states
+      winner.eloRating += delta
+      winner.wins += 1
+      winner.lastPlayedAt = match.createdAt
+      
+      loser.eloRating -= delta
+      loser.losses += 1
+      loser.lastPlayedAt = match.createdAt
+      
+      // Update match with new deltas
+      await Match.updateOne(
+        { id: match.id },
+        { 
+          winnerEloDelta: delta,
+          loserEloDelta: -delta
+        }
+      )
+      
+      // Add ELO history entries
+      historyEntries.push({
+        playerId: winnerId,
+        eloRating: winner.eloRating,
+        matchId: match.id,
+        timestamp: match.createdAt
+      })
+      historyEntries.push({
+        playerId: loserId,
+        eloRating: loser.eloRating,
+        matchId: match.id,
+        timestamp: match.createdAt
+      })
     }
     
-    // Insert all history entries
+    // Update all players in database
+    for (const playerId of Object.keys(playerState)) {
+      const state = playerState[playerId]
+      await User.updateOne(
+        { id: playerId },
+        {
+          eloRating: state.eloRating,
+          wins: state.wins,
+          losses: state.losses,
+          lastPlayedAt: state.lastPlayedAt
+        }
+      )
+    }
+    
+    // Insert all ELO history entries
     if (historyEntries.length > 0) {
       await EloHistory.insertMany(historyEntries)
-      console.log(`✅ Created ${historyEntries.length} ELO history entries from ${matches.length} matches`)
     }
     
+    console.log(`✅ Recalculated ELO for ${players.length} players from ${matches.length} matches`)
+    console.log(`📈 Created ${historyEntries.length} ELO history entries`)
+    
   } catch (err) {
-    console.error('Error migrating ELO history:', err.message)
+    console.error('Error recalculating ELO:', err.message)
   }
 }
 
@@ -597,8 +847,10 @@ async function startServer() {
     // Migrate data from JSON files if needed
     await migrateFromJsonFiles()
     
-    // Migrate ELO history for existing players
-    await migrateEloHistory()
+    // ONE-TIME: Recalculate all ELO ratings with current formula
+    // This will reset everyone and replay all matches
+    // Remove or comment out this line after it runs once
+    await recalculateAllElo()
     
     // Start Express server
     app.listen(PORT, () => {
