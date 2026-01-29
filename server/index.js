@@ -507,32 +507,79 @@ if (process.env.NODE_ENV === 'production') {
 // ============ ELO History Migration ============
 
 /**
- * Create initial ELO history entries for existing players who don't have any
+ * Reconstruct ELO history from all existing matches
+ * This creates a complete history by replaying all matches in order
  */
 async function migrateEloHistory() {
   try {
-    const players = await User.find()
-    let migrated = 0
+    // Check if we already have substantial history
+    const historyCount = await EloHistory.countDocuments()
+    const matchCount = await Match.countDocuments()
     
+    // If we have more history entries than matches, we've likely already migrated
+    // (each match creates 2 entries + 1 initial per player)
+    if (historyCount > matchCount) {
+      console.log('📈 ELO history already exists, skipping migration')
+      return
+    }
+    
+    console.log('📈 Reconstructing ELO history from existing matches...')
+    
+    // Clear existing history to rebuild from scratch
+    await EloHistory.deleteMany({})
+    
+    // Get all players and matches
+    const players = await User.find()
+    const matches = await Match.find().sort({ createdAt: 1 }) // Oldest first
+    
+    // Track each player's ELO over time (start at 800)
+    const playerElos = {}
+    const historyEntries = []
+    
+    // Create initial entries for all players
     for (const player of players) {
-      // Check if player already has ELO history
-      const existingHistory = await EloHistory.findOne({ playerId: player.id })
+      playerElos[player.id] = 800
+      historyEntries.push({
+        playerId: player.id,
+        eloRating: 800,
+        matchId: null,
+        timestamp: player.createdAt || new Date('2024-01-01')
+      })
+    }
+    
+    // Replay all matches in chronological order
+    for (const match of matches) {
+      const winnerId = match.winnerId
+      const loserId = match.loserId
       
-      if (!existingHistory) {
-        // Create initial entry with current rating
-        await new EloHistory({
-          playerId: player.id,
-          eloRating: player.eloRating,
-          matchId: null,
-          timestamp: player.createdAt || new Date()
-        }).save()
-        migrated++
+      // Apply the deltas that were recorded in the match
+      if (playerElos[winnerId] !== undefined) {
+        playerElos[winnerId] += match.winnerEloDelta
+        historyEntries.push({
+          playerId: winnerId,
+          eloRating: playerElos[winnerId],
+          matchId: match.id,
+          timestamp: match.createdAt
+        })
+      }
+      
+      if (playerElos[loserId] !== undefined) {
+        playerElos[loserId] += match.loserEloDelta
+        historyEntries.push({
+          playerId: loserId,
+          eloRating: playerElos[loserId],
+          matchId: match.id,
+          timestamp: match.createdAt
+        })
       }
     }
     
-    if (migrated > 0) {
-      console.log(`📈 Created initial ELO history for ${migrated} existing players`)
+    // Insert all history entries
+    if (historyEntries.length > 0) {
+      await EloHistory.insertMany(historyEntries)
+      console.log(`✅ Created ${historyEntries.length} ELO history entries from ${matches.length} matches`)
     }
+    
   } catch (err) {
     console.error('Error migrating ELO history:', err.message)
   }
