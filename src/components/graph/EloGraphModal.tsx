@@ -90,6 +90,12 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
     return player?.displayName || 'Unknown'
   }
 
+  // Get current ELO for a player
+  const getCurrentElo = (playerId: string) => {
+    const player = players.find(p => p.id === playerId)
+    return player?.eloRating || null
+  }
+
   // Build chart data
   const chartData = useMemo(() => {
     if (selectedPlayerIds.length === 0 || eloHistory.length === 0) {
@@ -109,8 +115,11 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
       eloHistory.map(h => new Date(h.timestamp).getTime())
     )].sort((a, b) => a - b)
 
-    // Create labels from timestamps
-    const labels = allTimestamps.map((ts, index) => `Game ${index + 1}`)
+    // Create labels from timestamps + "Now" for current ELO
+    const labels = [
+      ...allTimestamps.map((ts, index) => `Game ${index + 1}`),
+      'Now'
+    ]
 
     // Create datasets for each player
     const datasets = selectedPlayerIds.map((playerId, index) => {
@@ -128,6 +137,9 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
           .pop()
         return prevEntry?.eloRating || null
       })
+
+      // Add current ELO as the final point
+      data.push(getCurrentElo(playerId))
 
       return {
         label: getPlayerName(playerId),
