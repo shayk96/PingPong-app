@@ -80,6 +80,24 @@ export async function deleteMatch(matchId: string, password: string) {
   return res.json()
 }
 
+// ============ ELO History ============
+
+export interface EloHistoryEntry {
+  playerId: string
+  eloRating: number
+  matchId: string | null
+  timestamp: string
+}
+
+export async function fetchEloHistory(playerIds?: string[]): Promise<EloHistoryEntry[]> {
+  const url = playerIds && playerIds.length > 0
+    ? `${API_URL}/elo-history?playerIds=${playerIds.join(',')}`
+    : `${API_URL}/elo-history`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('Failed to fetch ELO history')
+  return res.json()
+}
+
 // ============ Health Check ============
 
 export async function checkHealth() {

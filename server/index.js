@@ -61,8 +61,17 @@ const matchSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 })
 
+// ELO History schema - tracks rating changes over time
+const eloHistorySchema = new mongoose.Schema({
+  playerId: { type: String, required: true, index: true },
+  eloRating: { type: Number, required: true },
+  matchId: { type: String }, // null for initial rating
+  timestamp: { type: Date, default: Date.now }
+})
+
 const User = mongoose.model('User', userSchema)
 const Match = mongoose.model('Match', matchSchema)
+const EloHistory = mongoose.model('EloHistory', eloHistorySchema)
 
 // Generate unique ID
 function generateId() {
@@ -214,6 +223,15 @@ app.post('/api/players', async (req, res) => {
     })
 
     await newPlayer.save()
+    
+    // Save initial ELO history entry
+    await new EloHistory({
+      playerId: newPlayer.id,
+      eloRating: 800,
+      matchId: null, // Initial rating, no match
+      timestamp: new Date()
+    }).save()
+    
     res.status(201).json(newPlayer)
   } catch (err) {
     res.status(500).json({ error: 'Failed to create player' })
@@ -271,6 +289,9 @@ app.delete('/api/players/:id', async (req, res) => {
     await Match.deleteMany({
       $or: [{ playerAId: id }, { playerBId: id }]
     })
+
+    // Remove ELO history for this player
+    await EloHistory.deleteMany({ playerId: id })
 
     // Remove the player
     await User.deleteOne({ id })
@@ -387,6 +408,25 @@ app.post('/api/matches', async (req, res) => {
       { $inc: { eloRating: loserDelta, losses: 1 }, $set: { lastPlayedAt: now } }
     )
 
+    // Save ELO history for both players
+    const updatedWinner = await User.findOne({ id: winnerId })
+    const updatedLoser = await User.findOne({ id: loserId })
+    
+    await EloHistory.insertMany([
+      {
+        playerId: winnerId,
+        eloRating: updatedWinner.eloRating,
+        matchId: newMatch.id,
+        timestamp: now
+      },
+      {
+        playerId: loserId,
+        eloRating: updatedLoser.eloRating,
+        matchId: newMatch.id,
+        timestamp: now
+      }
+    ])
+
     res.status(201).json(newMatch)
   } catch (err) {
     res.status(500).json({ error: 'Failed to create match' })
@@ -429,6 +469,25 @@ app.delete('/api/matches/:id', async (req, res) => {
   }
 })
 
+// Get ELO history for all players (or specific players)
+app.get('/api/elo-history', async (req, res) => {
+  try {
+    const { playerIds } = req.query
+    
+    let query = {}
+    if (playerIds) {
+      // If specific players requested, filter by their IDs
+      const ids = playerIds.split(',')
+      query = { playerId: { $in: ids } }
+    }
+    
+    const history = await EloHistory.find(query).sort({ timestamp: 1 })
+    res.json(history)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch ELO history' })
+  }
+})
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -445,6 +504,40 @@ if (process.env.NODE_ENV === 'production') {
   })
 }
 
+// ============ ELO History Migration ============
+
+/**
+ * Create initial ELO history entries for existing players who don't have any
+ */
+async function migrateEloHistory() {
+  try {
+    const players = await User.find()
+    let migrated = 0
+    
+    for (const player of players) {
+      // Check if player already has ELO history
+      const existingHistory = await EloHistory.findOne({ playerId: player.id })
+      
+      if (!existingHistory) {
+        // Create initial entry with current rating
+        await new EloHistory({
+          playerId: player.id,
+          eloRating: player.eloRating,
+          matchId: null,
+          timestamp: player.createdAt || new Date()
+        }).save()
+        migrated++
+      }
+    }
+    
+    if (migrated > 0) {
+      console.log(`📈 Created initial ELO history for ${migrated} existing players`)
+    }
+  } catch (err) {
+    console.error('Error migrating ELO history:', err.message)
+  }
+}
+
 // ============ Start Server ============
 
 async function startServer() {
@@ -456,6 +549,9 @@ async function startServer() {
     
     // Migrate data from JSON files if needed
     await migrateFromJsonFiles()
+    
+    // Migrate ELO history for existing players
+    await migrateEloHistory()
     
     // Start Express server
     app.listen(PORT, () => {

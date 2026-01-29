@@ -157,6 +157,23 @@ View match history between any two players:
 
 ---
 
+## 📊 ELO History Graph
+
+### How to Access
+- Click the **blue graph button** (📈) in the bottom-left corner of the screen
+
+### Features
+- **Compare multiple players** - Select any number of players to view on the same graph
+- **Track progress over time** - See how each player's ELO has changed match by match
+- **Color-coded lines** - Each player has a unique color for easy identification
+
+### Notes
+- ELO history is recorded after each match
+- New players will have limited history until they play more games
+- Existing players may only have data from their current rating if they played before this feature was added
+
+---
+
 ## 🔐 Admin Functions
 
 The following actions require the admin password:
