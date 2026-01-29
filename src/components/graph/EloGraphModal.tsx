@@ -218,7 +218,7 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="ELO History Graph">
+    <Modal isOpen={isOpen} onClose={onClose} title="ELO History Graph" maxWidth="2xl">
       <div className="space-y-4">
         {/* Player selection */}
         <div>
@@ -259,7 +259,7 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
         </div>
 
         {/* Chart */}
-        <div className="bg-background rounded-lg p-4 h-64">
+        <div className="bg-background rounded-lg p-4 h-96">
           {loading ? (
             <div className="h-full flex items-center justify-center">
               <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
