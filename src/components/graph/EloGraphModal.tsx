@@ -3,7 +3,7 @@
  * Uses Chart.js for line chart visualization
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -14,6 +14,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js'
+import zoomPlugin from 'chartjs-plugin-zoom'
 import { Line } from 'react-chartjs-2'
 import { Modal } from '../ui/Modal'
 import { fetchEloHistory, EloHistoryEntry } from '../../lib/api'
@@ -27,7 +28,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  zoomPlugin
 )
 
 // Predefined colors for player lines
@@ -52,6 +54,14 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([])
   const [eloHistory, setEloHistory] = useState<EloHistoryEntry[]>([])
   const [loading, setLoading] = useState(false)
+  const chartRef = useRef<any>(null)
+
+  // Reset zoom function
+  const resetZoom = () => {
+    if (chartRef.current) {
+      chartRef.current.resetZoom()
+    }
+  }
 
   // Load ELO history when selected players change
   useEffect(() => {
@@ -173,7 +183,22 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
         bodyColor: '#e5e5e5',
         borderColor: '#444',
         borderWidth: 1,
-      }
+      },
+      zoom: {
+        pan: {
+          enabled: true,
+          mode: 'xy' as const,
+        },
+        zoom: {
+          wheel: {
+            enabled: true,
+          },
+          pinch: {
+            enabled: true,
+          },
+          mode: 'xy' as const,
+        },
+      },
     },
     scales: {
       x: {
@@ -252,7 +277,7 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
               </div>
             </div>
           ) : chartData.datasets.length > 0 && chartData.datasets.some(d => d.data.some(v => v !== null)) ? (
-            <Line data={chartData} options={chartOptions} />
+            <Line ref={chartRef} data={chartData} options={chartOptions} />
           ) : (
             <div className="h-full flex items-center justify-center text-gray-500">
               <p>No ELO history available for selected players</p>
@@ -260,9 +285,21 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
           )}
         </div>
 
+        {/* Reset Zoom Button */}
+        {selectedPlayerIds.length > 0 && (
+          <div className="flex justify-center">
+            <button
+              onClick={resetZoom}
+              className="px-3 py-1.5 text-xs bg-background-lighter text-gray-300 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Reset Zoom
+            </button>
+          </div>
+        )}
+
         {/* Info */}
         <p className="text-xs text-gray-500 text-center">
-          ELO history is recorded after each match. New players start with no history data.
+          Scroll to zoom, drag to pan. ELO history is recorded after each match.
         </p>
       </div>
     </Modal>
