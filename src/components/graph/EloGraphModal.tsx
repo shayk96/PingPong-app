@@ -13,7 +13,9 @@ import {
   Title,
   Tooltip,
   Legend,
+  TimeScale,
 } from 'chart.js'
+import 'chartjs-adapter-date-fns'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { Line } from 'react-chartjs-2'
 import { Modal } from '../ui/Modal'
@@ -23,6 +25,7 @@ import { User } from '../../types'
 // Register Chart.js components
 ChartJS.register(
   CategoryScale,
+  TimeScale,
   LinearScale,
   PointElement,
   LineElement,
@@ -109,7 +112,7 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
   // Build chart data
   const chartData = useMemo(() => {
     if (selectedPlayerIds.length === 0 || eloHistory.length === 0) {
-      return { labels: [], datasets: [] }
+      return { datasets: [] }
     }
 
     // Group history by player
@@ -120,36 +123,25 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     })
 
-    // Find all unique timestamps across all players
-    const allTimestamps = [...new Set(
-      eloHistory.map(h => new Date(h.timestamp).getTime())
-    )].sort((a, b) => a - b)
-
-    // Create labels from timestamps + "Now" for current ELO
-    const labels = [
-      ...allTimestamps.map((ts, index) => `Game ${index + 1}`),
-      'Now'
-    ]
-
     // Create datasets for each player
     const datasets = selectedPlayerIds.map((playerId, index) => {
       const history = playerHistories[playerId] || []
       const colorIndex = index % PLAYER_COLORS.length
-      
-      // Map player's ratings to the timeline
-      const data = allTimestamps.map(ts => {
-        const entry = history.find(h => new Date(h.timestamp).getTime() === ts)
-        if (entry) return entry.eloRating
-        
-        // If no entry at this timestamp, use the last known rating before it
-        const prevEntry = history
-          .filter(h => new Date(h.timestamp).getTime() < ts)
-          .pop()
-        return prevEntry?.eloRating || null
-      })
 
-      // Add current ELO as the final point
-      data.push(getCurrentElo(playerId))
+      // Create data points with {x: timestamp, y: eloRating}
+      const data = history.map(entry => ({
+        x: new Date(entry.timestamp),
+        y: entry.eloRating
+      }))
+
+      // Add current ELO as the final point with current date
+      const currentElo = getCurrentElo(playerId)
+      if (currentElo !== null) {
+        data.push({
+          x: new Date(),
+          y: currentElo
+        })
+      }
 
       return {
         label: getPlayerName(playerId),
@@ -163,7 +155,7 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
       }
     })
 
-    return { labels, datasets }
+    return { datasets }
   }, [selectedPlayerIds, eloHistory, players])
 
   const chartOptions = {
@@ -202,8 +194,27 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
     },
     scales: {
       x: {
-        ticks: { color: '#9ca3af' },
-        grid: { color: 'rgba(75, 75, 75, 0.3)' }
+        type: 'time' as const,
+        time: {
+          unit: 'day',
+          displayFormats: {
+            day: 'MMM d',
+            week: 'MMM d',
+            month: 'MMM yyyy'
+          },
+          tooltipFormat: 'MMM d, yyyy h:mm a'
+        },
+        ticks: {
+          color: '#9ca3af',
+          maxRotation: 45,
+          minRotation: 0
+        },
+        grid: { color: 'rgba(75, 75, 75, 0.3)' },
+        title: {
+          display: true,
+          text: 'Date',
+          color: '#9ca3af'
+        }
       },
       y: {
         ticks: { color: '#9ca3af' },
@@ -276,7 +287,7 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
                 <p>Select players to view their ELO history</p>
               </div>
             </div>
-          ) : chartData.datasets.length > 0 && chartData.datasets.some(d => d.data.some(v => v !== null)) ? (
+          ) : chartData.datasets.length > 0 && chartData.datasets.some(d => d.data.length > 0) ? (
             <Line ref={chartRef} data={chartData} options={chartOptions} />
           ) : (
             <div className="h-full flex items-center justify-center text-gray-500">
