@@ -208,51 +208,31 @@ export default function NewMatch() {
         {/* Players Selection */}
         <div className="bg-background-light rounded-2xl p-4 border border-background-lighter">
           <label className="block text-sm font-medium text-gray-300 mb-3">
-            Select Players
+            {playerA && playerB ? 'Matchup' : 'Select Players'}
           </label>
-          
-          {/* Selected Players Display */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div 
-              className={`p-4 rounded-xl border-2 border-dashed text-center transition-all ${
-                playerA 
-                  ? 'border-accent bg-accent/10' 
-                  : 'border-background-lighter'
-              }`}
-            >
-              {playerA ? (
-                <div>
-                  <div className="text-white font-semibold">{playerA.displayName}</div>
-                  <div className="text-xs text-gray-400">{playerA.eloRating} ELO</div>
-                </div>
-              ) : (
-                <div className="text-gray-500 text-sm">Player 1</div>
-              )}
-            </div>
-            <div 
-              className={`p-4 rounded-xl border-2 border-dashed text-center transition-all ${
-                playerB 
-                  ? 'border-accent bg-accent/10' 
-                  : 'border-background-lighter'
-              }`}
-            >
-              {playerB ? (
-                <div>
-                  <div className="text-white font-semibold">{playerB.displayName}</div>
-                  <div className="text-xs text-gray-400">{playerB.eloRating} ELO</div>
-                </div>
-              ) : (
-                <div className="text-gray-500 text-sm">Player 2</div>
-              )}
-            </div>
-          </div>
 
-          {/* Player Grid */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* VS display when both selected */}
+          {playerA && playerB && (
+            <div className="flex items-center gap-3 mb-3 p-3 bg-background rounded-xl">
+              <div className="flex-1 text-center">
+                <div className="text-white font-bold text-lg">{playerA.displayName}</div>
+                <div className="text-xs text-gray-400">{playerA.eloRating} ELO</div>
+              </div>
+              <div className="text-accent font-display font-bold text-sm">VS</div>
+              <div className="flex-1 text-center">
+                <div className="text-white font-bold text-lg">{playerB.displayName}</div>
+                <div className="text-xs text-gray-400">{playerB.eloRating} ELO</div>
+              </div>
+            </div>
+          )}
+
+          {/* Player list */}
+          <div className="grid grid-cols-2 gap-2">
             {sortedPlayers.map((player) => {
               const isSelectedA = playerA?.id === player.id
               const isSelectedB = playerB?.id === player.id
               const isSelected = isSelectedA || isSelectedB
+              const bothSelected = playerA && playerB
               
               return (
                 <button
@@ -269,13 +249,21 @@ export default function NewMatch() {
                       selectPlayer(player, 'B')
                     }
                   }}
-                  className={`p-3 rounded-xl text-sm font-medium transition-all ${
+                  className={`relative flex items-center gap-2 p-3 rounded-xl text-sm font-medium transition-all ${
                     isSelected
-                      ? 'bg-accent text-white'
-                      : 'bg-background text-gray-300 hover:bg-background-lighter'
+                      ? 'bg-accent text-white ring-2 ring-accent ring-offset-1 ring-offset-background-light'
+                      : bothSelected
+                        ? 'bg-background text-gray-500'
+                        : 'bg-background text-gray-300 hover:bg-background-lighter'
                   }`}
                 >
-                  {player.displayName}
+                  {/* Selection badge */}
+                  {isSelected && (
+                    <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                      {isSelectedA ? '1' : '2'}
+                    </span>
+                  )}
+                  <span className="truncate">{player.displayName}</span>
                 </button>
               )
             })}
