@@ -9,6 +9,7 @@ import { useMatches } from '../hooks/useMatches'
 import { useLeaderboard, useRecentMatchesWithPlayers } from '../hooks/useStats'
 import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { MatchCard } from '../components/match/MatchCard'
+import { WeirdStatsBanner } from '../components/WeirdStatsBanner'
 import { Modal, Button, Input, ToastContainer, useToast } from '../components/ui'
 import type { User } from '../types'
 
@@ -259,6 +260,11 @@ export default function Leaderboard() {
           </div>
         </div>
       </header>
+
+      {/* Weird Stats Banner */}
+      {matches.length >= 3 && players.length >= 2 && (
+        <WeirdStatsBanner matches={matches} players={players} />
+      )}
 
       {/* Head to Head Button */}
       {players.length >= 2 && (
