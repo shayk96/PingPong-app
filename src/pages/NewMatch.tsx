@@ -1,6 +1,6 @@
 /**
  * New Match page
- * Form to log a new ping pong match
+ * Form to log one or more ping pong games between the same two players
  */
 
 import { useState } from 'react'
@@ -11,18 +11,41 @@ import { validateMatch } from '../lib/validation'
 import { ToastContainer, useToast, Button } from '../components/ui'
 import type { NewMatchInput, MatchType, User } from '../types'
 
+interface GameEntry {
+  playerAScore: string
+  playerBScore: string
+}
+
 export default function NewMatch() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, refresh: refreshPlayers } = usePlayers()
   const { createMatch } = useMatches()
   const { toasts, showToast, removeToast } = useToast()
   const [submitting, setSubmitting] = useState(false)
+  const [submitProgress, setSubmitProgress] = useState('')
 
   const [playerA, setPlayerA] = useState<User | null>(null)
   const [playerB, setPlayerB] = useState<User | null>(null)
-  const [playerAScore, setPlayerAScore] = useState('')
-  const [playerBScore, setPlayerBScore] = useState('')
+  const [games, setGames] = useState<GameEntry[]>([{ playerAScore: '', playerBScore: '' }])
   const [matchType, setMatchType] = useState<MatchType>(11)
+  const [gameErrors, setGameErrors] = useState<(string | null)[]>([])
+
+  const updateGame = (index: number, field: 'playerAScore' | 'playerBScore', value: string) => {
+    setGames(prev => prev.map((g, i) => i === index ? { ...g, [field]: value } : g))
+    // Clear error for this game when user edits
+    setGameErrors(prev => prev.map((e, i) => i === index ? null : e))
+  }
+
+  const addGame = () => {
+    setGames(prev => [...prev, { playerAScore: '', playerBScore: '' }])
+    setGameErrors(prev => [...prev, null])
+  }
+
+  const removeGame = (index: number) => {
+    if (games.length <= 1) return
+    setGames(prev => prev.filter((_, i) => i !== index))
+    setGameErrors(prev => prev.filter((_, i) => i !== index))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,38 +55,59 @@ export default function NewMatch() {
       return
     }
 
-    const input: NewMatchInput = {
-      playerAId: playerA.id,
-      playerBId: playerB.id,
-      playerAScore: parseInt(playerAScore) || 0,
-      playerBScore: parseInt(playerBScore) || 0,
-      matchType
+    // Validate all games
+    const inputs: NewMatchInput[] = []
+    const errors: (string | null)[] = []
+    let hasError = false
+
+    for (const game of games) {
+      const input: NewMatchInput = {
+        playerAId: playerA.id,
+        playerBId: playerB.id,
+        playerAScore: parseInt(game.playerAScore) || 0,
+        playerBScore: parseInt(game.playerBScore) || 0,
+        matchType
+      }
+      const validation = validateMatch(input)
+      if (!validation.isValid) {
+        errors.push(validation.error || 'Invalid score')
+        hasError = true
+      } else {
+        errors.push(null)
+      }
+      inputs.push(input)
     }
 
-    // Validate
-    const validation = validateMatch(input)
-    if (!validation.isValid) {
-      showToast(validation.error || 'Invalid match data', 'error')
+    if (hasError) {
+      setGameErrors(errors)
+      showToast('Some games have invalid scores — check below', 'error')
       return
     }
 
+    // Submit all games sequentially
     setSubmitting(true)
+    let savedCount = 0
     try {
-      await createMatch(input)
-      await refreshPlayers() // Refresh to get updated ELO
-      showToast('Match saved successfully!', 'success')
-      
-      // Navigate to leaderboard after short delay
+      for (let i = 0; i < inputs.length; i++) {
+        setSubmitProgress(`Saving game ${i + 1} of ${inputs.length}...`)
+        await createMatch(inputs[i])
+        savedCount++
+      }
+      await refreshPlayers()
+      const gameWord = inputs.length === 1 ? 'game' : 'games'
+      showToast(`${savedCount} ${gameWord} saved successfully!`, 'success')
+
       setTimeout(() => {
         navigate('/leaderboard')
       }, 1000)
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : 'Failed to save match',
+        `Saved ${savedCount} of ${inputs.length} games. ${err instanceof Error ? err.message : 'Failed to save remaining games.'}`,
         'error'
       )
     } finally {
       setSubmitting(false)
+      setSubmitProgress('')
     }
   }
 
@@ -238,42 +282,98 @@ export default function NewMatch() {
           </div>
         </div>
 
-        {/* Scores */}
+        {/* Games / Scores */}
         {playerA && playerB && (
           <div className="bg-background-light rounded-2xl p-4 border border-background-lighter">
-            <label className="block text-sm font-medium text-gray-300 mb-3">
-              Final Score
-            </label>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-center text-sm text-gray-400 mb-2">
-                  {playerA.displayName}
-                </div>
-                <input
-                  type="number"
-                  min="0"
-                  max="99"
-                  value={playerAScore}
-                  onChange={(e) => setPlayerAScore(e.target.value)}
-                  className="w-full bg-background border border-background-lighter rounded-xl px-4 py-4 text-white text-center text-3xl font-bold focus:outline-none focus:ring-2 focus:ring-accent"
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <div className="text-center text-sm text-gray-400 mb-2">
-                  {playerB.displayName}
-                </div>
-                <input
-                  type="number"
-                  min="0"
-                  max="99"
-                  value={playerBScore}
-                  onChange={(e) => setPlayerBScore(e.target.value)}
-                  className="w-full bg-background border border-background-lighter rounded-xl px-4 py-4 text-white text-center text-3xl font-bold focus:outline-none focus:ring-2 focus:ring-accent"
-                  placeholder="0"
-                />
-              </div>
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-300">
+                Scores
+              </label>
+              <span className="text-xs text-gray-500">
+                {games.length} {games.length === 1 ? 'game' : 'games'}
+              </span>
             </div>
+
+            {/* Column headers */}
+            <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: '1fr auto 1fr auto' }}>
+              <div className="text-center text-xs text-gray-400 truncate px-1">
+                {playerA.displayName}
+              </div>
+              <div></div>
+              <div className="text-center text-xs text-gray-400 truncate px-1">
+                {playerB.displayName}
+              </div>
+              <div className="w-8"></div>
+            </div>
+
+            {/* Game rows */}
+            <div className="space-y-2">
+              {games.map((game, index) => (
+                <div key={index}>
+                  <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr auto 1fr auto' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="99"
+                      value={game.playerAScore}
+                      onChange={(e) => updateGame(index, 'playerAScore', e.target.value)}
+                      className={`w-full bg-background border rounded-xl px-3 py-3 text-white text-center text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-accent ${
+                        gameErrors[index] ? 'border-error' : 'border-background-lighter'
+                      }`}
+                      placeholder="0"
+                    />
+                    <span className="text-gray-500 text-sm font-medium">–</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="99"
+                      value={game.playerBScore}
+                      onChange={(e) => updateGame(index, 'playerBScore', e.target.value)}
+                      className={`w-full bg-background border rounded-xl px-3 py-3 text-white text-center text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-accent ${
+                        gameErrors[index] ? 'border-error' : 'border-background-lighter'
+                      }`}
+                      placeholder="0"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeGame(index)}
+                      disabled={games.length <= 1}
+                      className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
+                        games.length <= 1
+                          ? 'text-gray-700 cursor-not-allowed'
+                          : 'text-gray-500 hover:text-error hover:bg-error/10'
+                      }`}
+                      title="Remove game"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+                  {gameErrors[index] && (
+                    <p className="text-error text-xs mt-1 text-center">
+                      {gameErrors[index]}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add game button */}
+            <button
+              type="button"
+              onClick={addGame}
+              className="w-full mt-3 py-2.5 rounded-xl border-2 border-dashed border-background-lighter text-gray-400 text-sm font-medium hover:border-accent hover:text-accent transition-all"
+            >
+              + Add Game
+            </button>
+          </div>
+        )}
+
+        {/* Submit progress */}
+        {submitting && submitProgress && (
+          <div className="text-center text-sm text-accent animate-pulse">
+            {submitProgress}
           </div>
         )}
 
@@ -291,10 +391,10 @@ export default function NewMatch() {
             type="submit"
             variant="primary"
             loading={submitting}
-            disabled={!playerA || !playerB || !playerAScore || !playerBScore}
+            disabled={!playerA || !playerB || games.every(g => !g.playerAScore && !g.playerBScore)}
             className="flex-1"
           >
-            Save Match
+            {games.length > 1 ? `Save ${games.length} Games` : 'Save Game'}
           </Button>
         </div>
       </form>
