@@ -3,16 +3,17 @@
  * Displays player rankings with ELO and stats
  */
 
+import { useNavigate } from 'react-router-dom'
 import type { LeaderboardEntry } from '../../types'
 import { getRatingTier } from '../../lib/elo'
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[]
   onDeletePlayer?: (playerId: string, playerName: string) => void
-  onViewHistory?: (playerId: string, playerName: string) => void
 }
 
-export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: LeaderboardTableProps) {
+export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTableProps) {
+  const navigate = useNavigate()
   if (entries.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -34,15 +35,18 @@ export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: Lea
             <RankBadge rank={entry.rank} isProvisional={entry.isProvisional} />
           </div>
 
-          {/* Player info */}
-          <div className="flex-1 min-w-0">
+          {/* Player info (clickable) */}
+          <button
+            onClick={() => navigate(`/player/${entry.user.id}`)}
+            className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
+          >
             <div className={`font-semibold truncate ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
               {entry.user.displayName}
             </div>
             <div className="text-xs text-yellow-400">
               {getRatingTier(entry.user.eloRating)}
             </div>
-          </div>
+          </button>
 
           {/* Stats column */}
           <div className="flex-shrink-0 text-center px-2">
@@ -59,19 +63,6 @@ export function LeaderboardTable({ entries, onDeletePlayer, onViewHistory }: Lea
               {entry.user.eloRating}
             </div>
           </div>
-
-          {/* View History button */}
-          {onViewHistory && (
-            <button
-              onClick={() => onViewHistory(entry.user.id, entry.user.displayName)}
-              className="flex-shrink-0 p-2 text-gray-500 hover:text-accent hover:bg-accent/10 rounded-lg transition-colors"
-              title="View match history"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-          )}
 
           {/* Delete button */}
           {onDeletePlayer && (

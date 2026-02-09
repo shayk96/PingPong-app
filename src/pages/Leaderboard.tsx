@@ -39,11 +39,6 @@ export default function Leaderboard() {
   const [deleteMatchPassword, setDeleteMatchPassword] = useState('')
   const [deletingMatch, setDeletingMatch] = useState(false)
 
-  // Player history modal state
-  const [showHistoryModal, setShowHistoryModal] = useState(false)
-  const [historyPlayerId, setHistoryPlayerId] = useState('')
-  const [historyPlayerName, setHistoryPlayerName] = useState('')
-
   // Head to Head modal state
   const [showH2HModal, setShowH2HModal] = useState(false)
   const [h2hPlayerA, setH2hPlayerA] = useState<User | null>(null)
@@ -113,36 +108,6 @@ export default function Leaderboard() {
     [...players].sort((a, b) => a.displayName.localeCompare(b.displayName)),
     [players]
   )
-
-  // Get matches for selected player
-  const playerMatches = useMemo(() => {
-    if (!historyPlayerId) return []
-    
-    const playerMap = new Map(players.map(p => [p.id, p]))
-    
-    return matches
-      .filter(m => m.playerAId === historyPlayerId || m.playerBId === historyPlayerId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(match => ({
-        ...match,
-        playerA: playerMap.get(match.playerAId),
-        playerB: playerMap.get(match.playerBId)
-      }))
-  }, [historyPlayerId, matches, players])
-
-  // Get player stats for history modal
-  const historyPlayerStats = useMemo(() => {
-    const player = players.find(p => p.id === historyPlayerId)
-    if (!player) return null
-    return {
-      eloRating: player.eloRating,
-      wins: player.wins || 0,
-      losses: player.losses || 0,
-      winRate: player.wins + player.losses > 0 
-        ? Math.round((player.wins / (player.wins + player.losses)) * 100) 
-        : 0
-    }
-  }, [historyPlayerId, players])
 
   // Get Head to Head matches and stats
   const h2hData = useMemo(() => {
@@ -248,11 +213,6 @@ export default function Leaderboard() {
     }
   }
 
-  const handleViewHistory = (playerId: string, playerName: string) => {
-    setHistoryPlayerId(playerId)
-    setHistoryPlayerName(playerName)
-    setShowHistoryModal(true)
-  }
 
   const handleRefresh = async () => {
     await Promise.all([refreshPlayers(), refreshMatches()])
@@ -368,7 +328,6 @@ export default function Leaderboard() {
         <section className="mb-8">
           <LeaderboardTable 
             entries={leaderboard} 
-            onViewHistory={handleViewHistory}
             onDeletePlayer={handleDeletePlayerClick}
           />
         </section>
@@ -540,101 +499,6 @@ export default function Leaderboard() {
               Delete Match
             </Button>
           </div>
-        </div>
-      </Modal>
-
-      {/* Player History Modal */}
-      <Modal
-        isOpen={showHistoryModal}
-        onClose={() => setShowHistoryModal(false)}
-        title={`${historyPlayerName}'s Match History`}
-      >
-        <div className="space-y-4">
-          {/* Player Stats Summary */}
-          {historyPlayerStats && (
-            <div className="grid grid-cols-4 gap-2 p-3 bg-background rounded-xl">
-              <div className="text-center">
-                <div className="text-xl font-bold text-white">{historyPlayerStats.eloRating}</div>
-                <div className="text-xs text-gray-400">ELO</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-success">{historyPlayerStats.wins}</div>
-                <div className="text-xs text-gray-400">Wins</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-error">{historyPlayerStats.losses}</div>
-                <div className="text-xs text-gray-400">Losses</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-accent">{historyPlayerStats.winRate}%</div>
-                <div className="text-xs text-gray-400">Win Rate</div>
-              </div>
-            </div>
-          )}
-
-          {/* Match List */}
-          <div className="max-h-80 overflow-y-auto space-y-2">
-            {playerMatches.length > 0 ? (
-              playerMatches.map((match) => {
-                const isWinner = match.winnerId === historyPlayerId
-                const opponent = match.playerAId === historyPlayerId ? match.playerB : match.playerA
-                const playerScore = match.playerAId === historyPlayerId ? match.playerAScore : match.playerBScore
-                const opponentScore = match.playerAId === historyPlayerId ? match.playerBScore : match.playerAScore
-                const eloDelta = isWinner ? match.winnerEloDelta : match.loserEloDelta
-
-                return (
-                  <div
-                    key={match.id}
-                    className={`p-3 rounded-xl border ${
-                      isWinner 
-                        ? 'bg-success/10 border-success/30' 
-                        : 'bg-error/10 border-error/30'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-lg font-bold ${isWinner ? 'text-success' : 'text-error'}`}>
-                          {isWinner ? 'W' : 'L'}
-                        </span>
-                        <div>
-                          <div className="text-white font-medium">
-                            vs {opponent?.displayName || 'Unknown'}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {match.createdAt.toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-white font-bold">
-                          {playerScore} - {opponentScore}
-                        </div>
-                        <div className={`text-sm ${isWinner ? 'text-success' : 'text-error'}`}>
-                          {eloDelta > 0 ? '+' : ''}{eloDelta} ELO
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })
-            ) : (
-              <div className="text-center py-8 text-gray-400">
-                <p>No matches yet</p>
-              </div>
-            )}
-          </div>
-
-          <Button
-            variant="secondary"
-            onClick={() => setShowHistoryModal(false)}
-            className="w-full"
-          >
-            Close
-          </Button>
         </div>
       </Modal>
 
