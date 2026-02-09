@@ -14,7 +14,7 @@ export function BottomNav() {
   const location = useLocation()
 
   // Hide floating buttons on the new-match page
-  const hideButtons = location.pathname === '/new-match'
+  const hideButtons = location.pathname.startsWith('/new-match')
 
   return (
     <>

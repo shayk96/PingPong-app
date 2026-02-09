@@ -27,7 +27,8 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
       {entries.map((entry, index) => (
         <div
           key={entry.user.id}
-          className="flex items-center gap-2 p-3 rounded-xl bg-background-light border border-transparent hover:border-background-lighter transition-all duration-200"
+          onClick={() => navigate(`/player/${entry.user.id}`)}
+          className="flex items-center gap-2 p-3 rounded-xl bg-background-light border border-transparent hover:border-background-lighter transition-all duration-200 cursor-pointer active:scale-[0.99]"
           style={{ animationDelay: `${index * 50}ms` }}
         >
           {/* Rank */}
@@ -35,18 +36,15 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
             <RankBadge rank={entry.rank} isProvisional={entry.isProvisional} />
           </div>
 
-          {/* Player info (clickable) */}
-          <button
-            onClick={() => navigate(`/player/${entry.user.id}`)}
-            className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
-          >
+          {/* Player info */}
+          <div className="flex-1 min-w-0">
             <div className={`font-semibold truncate ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
               {entry.user.displayName}
             </div>
             <div className="text-xs text-yellow-400">
               {getRatingTier(entry.user.eloRating)}
             </div>
-          </button>
+          </div>
 
           {/* Stats column */}
           <div className="flex-shrink-0 text-center px-2">
@@ -67,7 +65,10 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
           {/* Delete button */}
           {onDeletePlayer && (
             <button
-              onClick={() => onDeletePlayer(entry.user.id, entry.user.displayName)}
+              onClick={(e) => {
+                e.stopPropagation()
+                onDeletePlayer(entry.user.id, entry.user.displayName)
+              }}
               className="flex-shrink-0 p-2 text-gray-500 hover:text-error hover:bg-error/10 rounded-lg transition-colors"
               title="Delete player"
             >
