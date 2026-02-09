@@ -233,11 +233,21 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
       <div className="space-y-4">
         {/* Player selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Select Players to Compare
-          </label>
-          <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-background rounded-lg">
-            {players.map((player, index) => {
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-300">
+              Select Players
+            </label>
+            {selectedPlayerIds.length > 0 && (
+              <button
+                onClick={() => setSelectedPlayerIds([])}
+                className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {[...players].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((player) => {
               const isSelected = selectedPlayerIds.includes(player.id)
               const colorIndex = selectedPlayerIds.indexOf(player.id)
               const color = colorIndex >= 0 ? PLAYER_COLORS[colorIndex % PLAYER_COLORS.length] : null
@@ -246,26 +256,31 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
                 <button
                   key={player.id}
                   onClick={() => togglePlayer(player.id)}
-                  className={`
-                    px-3 py-1.5 rounded-full text-sm font-medium transition-all
-                    ${isSelected 
-                      ? 'text-white' 
-                      : 'bg-background-lighter text-gray-400 hover:text-white hover:bg-gray-600'
-                    }
-                  `}
-                  style={isSelected && color ? { 
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    isSelected
+                      ? 'text-white ring-2 ring-offset-1 ring-offset-background-light'
+                      : 'bg-background text-gray-400 hover:text-white hover:bg-background-lighter'
+                  }`}
+                  style={isSelected && color ? {
                     backgroundColor: color.bg,
-                    borderWidth: 2,
-                    borderColor: color.border
+                    ringColor: color.border,
+                    borderColor: color.border,
+                    ['--tw-ring-color' as any]: color.border,
                   } : undefined}
                 >
-                  {player.displayName}
+                  {isSelected && (
+                    <span
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: color?.border }}
+                    />
+                  )}
+                  <span className="truncate">{player.displayName}</span>
                 </button>
               )
             })}
           </div>
           {selectedPlayerIds.length === 0 && (
-            <p className="text-xs text-gray-500 mt-1">Click on players to add them to the graph</p>
+            <p className="text-xs text-gray-500 mt-2 text-center">Tap players to add them to the graph</p>
           )}
         </div>
 
