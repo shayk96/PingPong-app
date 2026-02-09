@@ -3,7 +3,7 @@
  * Form to log one or more ping pong games between the same two players
  */
 
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
@@ -30,6 +30,25 @@ export default function NewMatch() {
   const [games, setGames] = useState<GameEntry[]>([{ playerAScore: '', playerBScore: '' }])
   const [matchType, setMatchType] = useState<MatchType>(11)
   const [gameErrors, setGameErrors] = useState<(string | null)[]>([])
+  const scoreInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
+  const [focusTarget, setFocusTarget] = useState<string | null>(null)
+
+  // Focus a score input when target changes
+  useEffect(() => {
+    if (focusTarget) {
+      // Small delay to let the DOM render the new row
+      const timer = setTimeout(() => {
+        scoreInputRefs.current.get(focusTarget)?.focus()
+        setFocusTarget(null)
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [focusTarget])
+
+  const setScoreRef = useCallback((key: string, el: HTMLInputElement | null) => {
+    if (el) scoreInputRefs.current.set(key, el)
+    else scoreInputRefs.current.delete(key)
+  }, [])
 
   const updateGame = (index: number, field: 'playerAScore' | 'playerBScore', value: string) => {
     setGames(prev => prev.map((g, i) => i === index ? { ...g, [field]: value } : g))
@@ -38,8 +57,10 @@ export default function NewMatch() {
   }
 
   const addGame = () => {
+    const newIndex = games.length
     setGames(prev => [...prev, { playerAScore: '', playerBScore: '' }])
     setGameErrors(prev => [...prev, null])
+    setFocusTarget(`${newIndex}-A`)
   }
 
   const removeGame = (index: number) => {
@@ -121,9 +142,13 @@ export default function NewMatch() {
     if (slot === 'A') {
       if (playerB?.id === player.id) setPlayerB(null)
       setPlayerA(player)
+      // Auto-focus first score when both players now selected
+      if (playerB && playerB.id !== player.id) setFocusTarget('0-A')
     } else {
       if (playerA?.id === player.id) setPlayerA(null)
       setPlayerB(player)
+      // Auto-focus first score when both players now selected
+      if (playerA && playerA.id !== player.id) setFocusTarget('0-A')
     }
   }
 
@@ -331,6 +356,7 @@ export default function NewMatch() {
                 <div key={index}>
                   <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr auto 1fr auto' }}>
                     <input
+                      ref={(el) => setScoreRef(`${index}-A`, el)}
                       type="number"
                       min="0"
                       max="99"
@@ -343,6 +369,7 @@ export default function NewMatch() {
                     />
                     <span className="text-gray-500 text-sm font-medium">–</span>
                     <input
+                      ref={(el) => setScoreRef(`${index}-B`, el)}
                       type="number"
                       min="0"
                       max="99"
