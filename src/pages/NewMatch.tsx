@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
 import { validateMatch } from '../lib/validation'
+import { expectedScore } from '../lib/elo'
 import { ToastContainer, useToast, Button } from '../components/ui'
 import type { NewMatchInput, MatchType, User } from '../types'
 
@@ -212,19 +213,49 @@ export default function NewMatch() {
           </label>
 
           {/* VS display when both selected */}
-          {playerA && playerB && (
-            <div className="flex items-center gap-3 mb-3 p-3 bg-background rounded-xl">
-              <div className="flex-1 text-center">
-                <div className="text-white font-bold text-lg">{playerA.displayName}</div>
-                <div className="text-xs text-gray-400">{playerA.eloRating} ELO</div>
+          {playerA && playerB && (() => {
+            const winPctA = Math.round(expectedScore(playerA.eloRating, playerB.eloRating) * 100)
+            const winPctB = 100 - winPctA
+            return (
+              <div className="mb-3 p-3 bg-background rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 text-center">
+                    <div className="text-white font-bold text-lg">{playerA.displayName}</div>
+                    <div className="text-xs text-gray-400">{playerA.eloRating} ELO</div>
+                  </div>
+                  <div className="text-accent font-display font-bold text-sm">VS</div>
+                  <div className="flex-1 text-center">
+                    <div className="text-white font-bold text-lg">{playerB.displayName}</div>
+                    <div className="text-xs text-gray-400">{playerB.eloRating} ELO</div>
+                  </div>
+                </div>
+                {/* Win probability bar */}
+                <div className="mt-3 pt-3 border-t border-background-lighter">
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className={winPctA >= winPctB ? 'text-accent font-semibold' : 'text-gray-400'}>{winPctA}%</span>
+                    <span className="text-gray-500">Win Probability</span>
+                    <span className={winPctB >= winPctA ? 'text-accent font-semibold' : 'text-gray-400'}>{winPctB}%</span>
+                  </div>
+                  <div className="flex h-1.5 rounded-full overflow-hidden gap-0.5">
+                    <div
+                      className="rounded-full transition-all duration-500"
+                      style={{
+                        width: `${winPctA}%`,
+                        backgroundColor: winPctA >= winPctB ? '#f97316' : '#4b5563',
+                      }}
+                    />
+                    <div
+                      className="rounded-full transition-all duration-500"
+                      style={{
+                        width: `${winPctB}%`,
+                        backgroundColor: winPctB > winPctA ? '#f97316' : '#4b5563',
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="text-accent font-display font-bold text-sm">VS</div>
-              <div className="flex-1 text-center">
-                <div className="text-white font-bold text-lg">{playerB.displayName}</div>
-                <div className="text-xs text-gray-400">{playerB.eloRating} ELO</div>
-              </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Player list */}
           <div className="grid grid-cols-2 gap-2">

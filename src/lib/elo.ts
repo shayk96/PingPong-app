@@ -64,7 +64,7 @@ export function getMarginMultiplier(winnerScore: number, loserScore: number): nu
  * @param opponentRating - The rating of the opponent
  * @returns Expected score between 0 and 1
  */
-function expectedScore(playerRating: number, opponentRating: number): number {
+export function expectedScore(playerRating: number, opponentRating: number): number {
   return 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400))
 }
 
