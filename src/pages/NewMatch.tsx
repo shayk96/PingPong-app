@@ -3,7 +3,7 @@
  * Form to log one or more ping pong games between the same two players
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
@@ -20,7 +20,7 @@ interface GameEntry {
 export default function NewMatch() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, refresh: refreshPlayers } = usePlayers()
-  const { createMatch } = useMatches()
+  const { matches, createMatch } = useMatches()
   const { toasts, showToast, removeToast } = useToast()
   const [submitting, setSubmitting] = useState(false)
   const [submitProgress, setSubmitProgress] = useState('')
@@ -49,6 +49,37 @@ export default function NewMatch() {
     if (el) scoreInputRefs.current.set(key, el)
     else scoreInputRefs.current.delete(key)
   }, [])
+
+  // Blended win probability: H2H history + ELO, with more weight on history
+  const winProb = useMemo(() => {
+    if (!playerA || !playerB) return null
+
+    // ELO-based probability
+    const eloProbA = expectedScore(playerA.eloRating, playerB.eloRating)
+
+    // Head-to-head record
+    const h2hMatches = matches.filter(m =>
+      (m.playerAId === playerA.id && m.playerBId === playerB.id) ||
+      (m.playerAId === playerB.id && m.playerBId === playerA.id)
+    )
+    const h2hGames = h2hMatches.length
+    const h2hWinsA = h2hMatches.filter(m => m.winnerId === playerA.id).length
+    const h2hProbA = h2hGames > 0 ? h2hWinsA / h2hGames : 0.5
+
+    // Blend: each H2H game shifts 7% weight toward history, max 70%
+    const h2hWeight = Math.min(h2hGames * 0.07, 0.7)
+    const eloWeight = 1 - h2hWeight
+    const blendedA = eloWeight * eloProbA + h2hWeight * h2hProbA
+    const pctA = Math.round(blendedA * 100)
+
+    return {
+      pctA: Math.max(1, Math.min(99, pctA)),
+      pctB: Math.max(1, Math.min(99, 100 - pctA)),
+      h2hGames,
+      h2hWinsA,
+      h2hWinsB: h2hGames - h2hWinsA,
+    }
+  }, [playerA, playerB, matches])
 
   const updateGame = (index: number, field: 'playerAScore' | 'playerBScore', value: string) => {
     setGames(prev => prev.map((g, i) => i === index ? { ...g, [field]: value } : g))
@@ -280,49 +311,55 @@ export default function NewMatch() {
             })}
           </div>
 
-          {/* VS display with names and win probability */}
-          {playerA && playerB && (() => {
-            const winPctA = Math.round(expectedScore(playerA.eloRating, playerB.eloRating) * 100)
-            const winPctB = 100 - winPctA
-            return (
-              <div className="mt-3 p-3 bg-background rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 text-center">
-                    <div className="text-white font-bold">{playerA.displayName}</div>
-                    <div className="text-xs text-gray-400">{playerA.eloRating} ELO</div>
-                  </div>
-                  <div className="text-accent font-display font-bold text-sm">VS</div>
-                  <div className="flex-1 text-center">
-                    <div className="text-white font-bold">{playerB.displayName}</div>
-                    <div className="text-xs text-gray-400">{playerB.eloRating} ELO</div>
-                  </div>
+          {/* VS display with names, H2H record, and blended win probability */}
+          {playerA && playerB && winProb && (
+            <div className="mt-3 p-3 bg-background rounded-xl">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 text-center">
+                  <div className="text-white font-bold">{playerA.displayName}</div>
+                  <div className="text-xs text-gray-400">{playerA.eloRating} ELO</div>
                 </div>
-                <div className="mt-2.5 pt-2.5 border-t border-background-lighter">
-                  <div className="flex justify-between text-xs mb-1.5">
-                    <span className={winPctA >= winPctB ? 'text-accent font-semibold' : 'text-gray-400'}>{winPctA}%</span>
-                    <span className="text-gray-500">Win Probability</span>
-                    <span className={winPctB >= winPctA ? 'text-accent font-semibold' : 'text-gray-400'}>{winPctB}%</span>
-                  </div>
-                  <div className="flex h-1.5 rounded-full overflow-hidden gap-0.5">
-                    <div
-                      className="rounded-full transition-all duration-500"
-                      style={{
-                        width: `${winPctA}%`,
-                        backgroundColor: winPctA >= winPctB ? '#f97316' : '#4b5563',
-                      }}
-                    />
-                    <div
-                      className="rounded-full transition-all duration-500"
-                      style={{
-                        width: `${winPctB}%`,
-                        backgroundColor: winPctB > winPctA ? '#f97316' : '#4b5563',
-                      }}
-                    />
-                  </div>
+                <div className="text-accent font-display font-bold text-sm">VS</div>
+                <div className="flex-1 text-center">
+                  <div className="text-white font-bold">{playerB.displayName}</div>
+                  <div className="text-xs text-gray-400">{playerB.eloRating} ELO</div>
                 </div>
               </div>
-            )
-          })()}
+              {/* H2H record */}
+              {winProb.h2hGames > 0 && (
+                <div className="mt-2 flex justify-center">
+                  <span className="text-xs text-gray-500">
+                    H2H: <span className="text-gray-300">{winProb.h2hWinsA}</span>–<span className="text-gray-300">{winProb.h2hWinsB}</span>
+                    <span className="text-gray-600 ml-1">({winProb.h2hGames} games)</span>
+                  </span>
+                </div>
+              )}
+              {/* Win probability bar */}
+              <div className="mt-2.5 pt-2.5 border-t border-background-lighter">
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className={winProb.pctA >= winProb.pctB ? 'text-accent font-semibold' : 'text-gray-400'}>{winProb.pctA}%</span>
+                  <span className="text-gray-500">Win Probability</span>
+                  <span className={winProb.pctB >= winProb.pctA ? 'text-accent font-semibold' : 'text-gray-400'}>{winProb.pctB}%</span>
+                </div>
+                <div className="flex h-1.5 rounded-full overflow-hidden gap-0.5">
+                  <div
+                    className="rounded-full transition-all duration-500"
+                    style={{
+                      width: `${winProb.pctA}%`,
+                      backgroundColor: winProb.pctA >= winProb.pctB ? '#f97316' : '#4b5563',
+                    }}
+                  />
+                  <div
+                    className="rounded-full transition-all duration-500"
+                    style={{
+                      width: `${winProb.pctB}%`,
+                      backgroundColor: winProb.pctB > winProb.pctA ? '#f97316' : '#4b5563',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Games / Scores */}
