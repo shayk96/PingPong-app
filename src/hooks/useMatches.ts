@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { fetchMatches, createMatch as apiCreateMatch, deleteMatch as apiDeleteMatch } from '../lib/api'
+import { fetchMatches, createMatch as apiCreateMatch, deleteMatch as apiDeleteMatch, undoMatch as apiUndoMatch } from '../lib/api'
 import type { Match, NewMatchInput } from '../types'
 
 export function useMatches(playerId?: string) {
@@ -61,7 +61,12 @@ export function useMatches(playerId?: string) {
     await loadMatches() // Refresh list
   }, [loadMatches])
 
+  const undoMatch = useCallback(async (matchId: string): Promise<void> => {
+    await apiUndoMatch(matchId)
+    await loadMatches() // Refresh list
+  }, [loadMatches])
+
   const refresh = loadMatches
 
-  return { matches, loading, error, createMatch, deleteMatch, refresh }
+  return { matches, loading, error, createMatch, deleteMatch, undoMatch, refresh }
 }

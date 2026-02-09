@@ -67,6 +67,18 @@ export async function createMatch(data: {
   return res.json()
 }
 
+export async function undoMatch(matchId: string) {
+  const res = await fetch(`${API_URL}/matches/${matchId}/undo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error || 'Failed to undo match')
+  }
+  return res.json()
+}
+
 export async function deleteMatch(matchId: string, password: string) {
   const res = await fetch(`${API_URL}/matches/${matchId}`, {
     method: 'DELETE',

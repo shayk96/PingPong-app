@@ -433,6 +433,48 @@ app.post('/api/matches', async (req, res) => {
   }
 })
 
+// Undo a recent match (no password, 5-minute window)
+const UNDO_WINDOW_MS = 5 * 60 * 1000 // 5 minutes
+
+app.post('/api/matches/:id/undo', async (req, res) => {
+  const { id } = req.params
+
+  try {
+    const match = await Match.findOne({ id })
+    if (!match) {
+      return res.status(404).json({ error: 'Match not found' })
+    }
+
+    // Check if match is within the undo window
+    const elapsed = Date.now() - new Date(match.createdAt).getTime()
+    if (elapsed > UNDO_WINDOW_MS) {
+      return res.status(403).json({ error: 'Undo window has expired (5 minutes)' })
+    }
+
+    // Revert ELO and win/loss for winner
+    await User.updateOne(
+      { id: match.winnerId },
+      { $inc: { eloRating: -match.winnerEloDelta, wins: -1 } }
+    )
+
+    // Revert ELO and win/loss for loser
+    await User.updateOne(
+      { id: match.loserId },
+      { $inc: { eloRating: -match.loserEloDelta, losses: -1 } }
+    )
+
+    // Remove ELO history entries for this match
+    await EloHistory.deleteMany({ matchId: id })
+
+    // Remove match
+    await Match.deleteOne({ id })
+
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to undo match' })
+  }
+})
+
 // Delete a match (password protected)
 app.delete('/api/matches/:id', async (req, res) => {
   const { id } = req.params

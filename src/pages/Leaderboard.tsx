@@ -3,7 +3,7 @@
  * Displays player rankings sorted by ELO with option to add/delete players and matches
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
 import { useLeaderboard, useRecentMatchesWithPlayers } from '../hooks/useStats'
@@ -15,7 +15,7 @@ import type { User } from '../types'
 
 export default function Leaderboard() {
   const { players, loading: playersLoading, addPlayer, deletePlayer, refresh: refreshPlayers } = usePlayers()
-  const { matches, loading: matchesLoading, deleteMatch, refresh: refreshMatches } = useMatches()
+  const { matches, loading: matchesLoading, deleteMatch, undoMatch, refresh: refreshMatches } = useMatches()
   const leaderboard = useLeaderboard(players, matches)
   const recentMatches = useRecentMatchesWithPlayers(matches, players, 10)
   const { toasts, showToast, removeToast } = useToast()
@@ -48,6 +48,63 @@ export default function Leaderboard() {
   const [showH2HModal, setShowH2HModal] = useState(false)
   const [h2hPlayerA, setH2hPlayerA] = useState<User | null>(null)
   const [h2hPlayerB, setH2hPlayerB] = useState<User | null>(null)
+
+  // Undo state
+  const [undoing, setUndoing] = useState(false)
+  const [undoTimeLeft, setUndoTimeLeft] = useState(0)
+
+  const UNDO_WINDOW_MS = 5 * 60 * 1000 // 5 minutes
+
+  // Find the most recent match and check if it's within the undo window
+  const undoableMatch = useMemo(() => {
+    if (matches.length === 0) return null
+    const latest = matches[0] // already sorted newest first
+    const elapsed = Date.now() - new Date(latest.createdAt).getTime()
+    if (elapsed < UNDO_WINDOW_MS) return latest
+    return null
+  }, [matches])
+
+  // Countdown timer for undo window
+  useEffect(() => {
+    if (!undoableMatch) {
+      setUndoTimeLeft(0)
+      return
+    }
+
+    const tick = () => {
+      const elapsed = Date.now() - new Date(undoableMatch.createdAt).getTime()
+      const remaining = Math.max(0, UNDO_WINDOW_MS - elapsed)
+      setUndoTimeLeft(remaining)
+    }
+
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [undoableMatch])
+
+  const formatTimeLeft = useCallback((ms: number) => {
+    const totalSeconds = Math.ceil(ms / 1000)
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }, [])
+
+  const handleUndo = async () => {
+    if (!undoableMatch) return
+    setUndoing(true)
+    try {
+      await undoMatch(undoableMatch.id)
+      await refreshPlayers()
+      showToast('Match undone successfully!', 'success')
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : 'Failed to undo match',
+        'error'
+      )
+    } finally {
+      setUndoing(false)
+    }
+  }
 
   const loading = playersLoading || matchesLoading
 
@@ -260,6 +317,35 @@ export default function Leaderboard() {
           </div>
         </div>
       </header>
+
+      {/* Undo Last Match Banner */}
+      {undoableMatch && undoTimeLeft > 0 && (() => {
+        const playerA = players.find(p => p.id === undoableMatch.playerAId)
+        const playerB = players.find(p => p.id === undoableMatch.playerBId)
+        return (
+          <div className="mb-4 p-3 bg-accent/10 border border-accent/30 rounded-xl animate-fade-in">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-300">
+                  <span className="text-white font-medium">{playerA?.displayName || '?'}</span>
+                  {' '}{undoableMatch.playerAScore}-{undoableMatch.playerBScore}{' '}
+                  <span className="text-white font-medium">{playerB?.displayName || '?'}</span>
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Undo available for {formatTimeLeft(undoTimeLeft)}
+                </p>
+              </div>
+              <button
+                onClick={handleUndo}
+                disabled={undoing}
+                className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-accent/20 text-accent text-sm font-medium hover:bg-accent/30 transition-all disabled:opacity-50"
+              >
+                {undoing ? 'Undoing...' : 'Undo'}
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Weird Stats Banner */}
       {matches.length >= 3 && players.length >= 2 && (
