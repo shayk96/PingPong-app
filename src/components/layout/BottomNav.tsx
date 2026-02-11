@@ -1,30 +1,25 @@
 /**
- * Floating action buttons for new match and ELO graph
+ * Floating action buttons for new match and match history
  * Mobile-first floating buttons
  */
 
-import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { EloGraphModal } from '../graph/EloGraphModal'
-import { usePlayers } from '../../hooks/usePlayers'
 
 export function BottomNav() {
-  const [showGraph, setShowGraph] = useState(false)
-  const { players } = usePlayers()
   const location = useLocation()
 
-  // Hide floating buttons on the new-match page
-  const hideButtons = location.pathname.startsWith('/new-match')
+  // Hide floating buttons on the new-match page and all-matches page
+  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches')
 
   return (
     <>
       {!hideButtons && (
         <>
-          {/* Graph button - left side */}
-          <button
-            onClick={() => setShowGraph(true)}
+          {/* All Matches button - left side */}
+          <Link
+            to="/matches"
             className="fixed bottom-6 left-6 w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/40 hover:scale-105 active:scale-95 transition-transform z-50"
-            title="ELO Graph"
+            title="All Matches"
           >
             <svg 
               className="w-7 h-7 text-white" 
@@ -36,10 +31,10 @@ export function BottomNav() {
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
                 strokeWidth={2} 
-                d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" 
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" 
               />
             </svg>
-          </button>
+          </Link>
 
           {/* Add match button - right side */}
           <Link
@@ -63,13 +58,6 @@ export function BottomNav() {
           </Link>
         </>
       )}
-
-      {/* ELO Graph Modal */}
-      <EloGraphModal 
-        isOpen={showGraph} 
-        onClose={() => setShowGraph(false)} 
-        players={players}
-      />
     </>
   )
 }

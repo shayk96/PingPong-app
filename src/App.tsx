@@ -3,6 +3,7 @@ import Layout from './components/layout/Layout'
 import Leaderboard from './pages/Leaderboard'
 import NewMatch from './pages/NewMatch'
 import PlayerProfile from './pages/PlayerProfile'
+import AllMatches from './pages/AllMatches'
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Route path="leaderboard" element={<Leaderboard />} />
         <Route path="new-match" element={<NewMatch />} />
         <Route path="player/:id" element={<PlayerProfile />} />
+        <Route path="matches" element={<AllMatches />} />
       </Route>
       
       {/* Catch all */}

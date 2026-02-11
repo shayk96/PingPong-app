@@ -475,14 +475,9 @@ app.post('/api/matches/:id/undo', async (req, res) => {
   }
 })
 
-// Delete a match (password protected)
+// Delete a match
 app.delete('/api/matches/:id', async (req, res) => {
   const { id } = req.params
-  const { password } = req.body || {}
-  
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(403).json({ error: 'Invalid password' })
-  }
 
   try {
     const match = await Match.findOne({ id })

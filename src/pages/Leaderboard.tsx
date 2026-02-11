@@ -36,7 +36,6 @@ export default function Leaderboard() {
   const [showDeleteMatchModal, setShowDeleteMatchModal] = useState(false)
   const [deleteMatchId, setDeleteMatchId] = useState('')
   const [deleteMatchInfo, setDeleteMatchInfo] = useState('')
-  const [deleteMatchPassword, setDeleteMatchPassword] = useState('')
   const [deletingMatch, setDeletingMatch] = useState(false)
 
   // Head to Head modal state
@@ -186,23 +185,16 @@ export default function Leaderboard() {
   const handleDeleteMatchClick = (matchId: string, matchInfo: string) => {
     setDeleteMatchId(matchId)
     setDeleteMatchInfo(matchInfo)
-    setDeleteMatchPassword('')
     setShowDeleteMatchModal(true)
   }
 
   const handleDeleteMatch = async () => {
-    if (!deleteMatchPassword) {
-      showToast('Please enter the admin password', 'error')
-      return
-    }
-
     setDeletingMatch(true)
     try {
-      await deleteMatch(deleteMatchId, deleteMatchPassword)
+      await deleteMatch(deleteMatchId)
       await refreshPlayers()
       showToast('Match deleted successfully!', 'success')
       setShowDeleteMatchModal(false)
-      setDeleteMatchPassword('')
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : 'Failed to delete match',
@@ -464,23 +456,11 @@ export default function Leaderboard() {
       >
         <div className="space-y-4">
           <div className="bg-error/10 border border-error/30 rounded-xl p-4">
-            <p className="text-error font-medium mb-1">⚠️ Warning</p>
+            <p className="text-error font-medium mb-1">Are you sure?</p>
             <p className="text-gray-300 text-sm">
-              This will delete the match <strong className="text-white">{deleteMatchInfo}</strong> and recalculate player ratings. This action cannot be undone.
+              This will delete <strong className="text-white">{deleteMatchInfo}</strong> and recalculate player ratings. This cannot be undone.
             </p>
           </div>
-          
-          <Input
-            label="Admin Password"
-            type="password"
-            value={deleteMatchPassword}
-            onChange={(e) => setDeleteMatchPassword(e.target.value)}
-            placeholder="Enter admin password"
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleDeleteMatch()
-            }}
-          />
           
           <div className="flex gap-3">
             <Button

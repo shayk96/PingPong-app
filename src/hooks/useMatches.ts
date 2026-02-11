@@ -56,8 +56,8 @@ export function useMatches(playerId?: string) {
     await loadMatches() // Refresh list
   }, [loadMatches])
 
-  const deleteMatch = useCallback(async (matchId: string, password: string): Promise<void> => {
-    await apiDeleteMatch(matchId, password)
+  const deleteMatch = useCallback(async (matchId: string): Promise<void> => {
+    await apiDeleteMatch(matchId)
     await loadMatches() // Refresh list
   }, [loadMatches])
 
