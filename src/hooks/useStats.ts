@@ -103,7 +103,7 @@ const INACTIVITY_GRACE_DAYS = 14
 /**
  * Check if player is inactive (hasn't played in more than grace period)
  */
-function isPlayerInactive(lastPlayedAt: Date | undefined): boolean {
+export function isPlayerInactive(lastPlayedAt: Date | undefined): boolean {
   if (!lastPlayedAt) return false
   
   const now = new Date()
@@ -116,39 +116,39 @@ function isPlayerInactive(lastPlayedAt: Date | undefined): boolean {
  * Calculate leaderboard with rankings and rank changes
  * Uses stored wins/losses from player data
  * Players with < 5 games are marked as provisional and shown at the bottom
- * Inactive players (no games in 14+ days) are hidden
+ * Inactive players (no games in 14+ days) are hidden unless includeInactive is true
  */
 export function useLeaderboard(
   players: User[],
-  matches: Match[]
+  matches: Match[],
+  includeInactive: boolean = false
 ): LeaderboardEntry[] {
   return useMemo(() => {
-    // Filter out inactive players (haven't played in more than 14 days)
-    const activePlayers = players.filter(p => !isPlayerInactive(p.lastPlayedAt))
-    
-    // Separate established and provisional players
-    const establishedPlayers = activePlayers.filter(p => (p.wins + p.losses) >= MIN_GAMES_FOR_RANKING)
-    const provisionalPlayers = activePlayers.filter(p => (p.wins + p.losses) < MIN_GAMES_FOR_RANKING)
-    
-    // Sort each group by ELO rating
+    const playersToRank = includeInactive
+      ? [...players]
+      : players.filter(p => !isPlayerInactive(p.lastPlayedAt))
+
+    // Separate established and provisional (and when including inactive, inactive go at bottom)
+    const establishedPlayers = playersToRank.filter(p => (p.wins + p.losses) >= MIN_GAMES_FOR_RANKING && !isPlayerInactive(p.lastPlayedAt))
+    const provisionalPlayers = playersToRank.filter(p => (p.wins + p.losses) < MIN_GAMES_FOR_RANKING && !isPlayerInactive(p.lastPlayedAt))
+    const inactivePlayers = includeInactive ? playersToRank.filter(p => isPlayerInactive(p.lastPlayedAt)) : []
+
     establishedPlayers.sort((a, b) => b.eloRating - a.eloRating)
     provisionalPlayers.sort((a, b) => b.eloRating - a.eloRating)
-    
-    // Combine: established first, then provisional
-    const sortedPlayers = [...establishedPlayers, ...provisionalPlayers]
-    
-    // Get the most recent match to determine rank changes
+    inactivePlayers.sort((a, b) => b.eloRating - a.eloRating)
+
+    const sortedPlayers = [...establishedPlayers, ...provisionalPlayers, ...inactivePlayers]
+
     const recentMatches = [...matches].sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
     )
     const lastMatch = recentMatches[0]
 
-    // Create leaderboard entries using stored wins/losses
     const leaderboard: LeaderboardEntry[] = sortedPlayers.map((user, index) => {
       const totalGames = (user.wins || 0) + (user.losses || 0)
       const isProvisional = totalGames < MIN_GAMES_FOR_RANKING
-      
-      // Determine rank change based on last match
+      const inactive = isPlayerInactive(user.lastPlayedAt)
+
       let rankChange = 0
       if (lastMatch) {
         if (user.id === lastMatch.winnerId) {
@@ -164,12 +164,13 @@ export function useLeaderboard(
         wins: user.wins || 0,
         losses: user.losses || 0,
         rankChange,
-        isProvisional
+        isProvisional,
+        isInactive: inactive || undefined
       }
     })
 
     return leaderboard
-  }, [players, matches])
+  }, [players, matches, includeInactive])
 }
 
 /**

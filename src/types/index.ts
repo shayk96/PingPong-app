@@ -67,6 +67,7 @@ export interface LeaderboardEntry {
   previousRank?: number
   rankChange: number // positive = moved up, negative = moved down, 0 = no change
   isProvisional: boolean // true if player has < 5 games
+  isInactive?: boolean // true if player hasn't played in 14+ days (hidden by default, show via button)
 }
 
 // Match with player details for display

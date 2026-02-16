@@ -6,7 +6,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
-import { useLeaderboard, useRecentMatchesWithPlayers } from '../hooks/useStats'
+import { useLeaderboard, useRecentMatchesWithPlayers, isPlayerInactive } from '../hooks/useStats'
 import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { MatchCard } from '../components/match/MatchCard'
 import { WeirdStatsBanner } from '../components/WeirdStatsBanner'
@@ -16,8 +16,10 @@ import type { User } from '../types'
 export default function Leaderboard() {
   const { players, loading: playersLoading, addPlayer, deletePlayer, refresh: refreshPlayers } = usePlayers()
   const { matches, loading: matchesLoading, deleteMatch, undoMatch, refresh: refreshMatches } = useMatches()
-  const leaderboard = useLeaderboard(players, matches)
+  const [showInactivePlayers, setShowInactivePlayers] = useState(false)
+  const leaderboard = useLeaderboard(players, matches, showInactivePlayers)
   const recentMatches = useRecentMatchesWithPlayers(matches, players, 10)
+  const inactiveCount = useMemo(() => players.filter(p => isPlayerInactive(p.lastPlayedAt)).length, [players])
   const { toasts, showToast, removeToast } = useToast()
   
   // Add player modal state
@@ -351,6 +353,18 @@ export default function Leaderboard() {
             entries={leaderboard} 
             onDeletePlayer={handleDeletePlayerClick}
           />
+          {inactiveCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowInactivePlayers(prev => !prev)}
+              className="w-full mt-3 py-2.5 rounded-xl border border-background-lighter text-gray-400 text-sm font-medium hover:bg-background-lighter hover:text-gray-300 transition-colors"
+            >
+              {showInactivePlayers
+                ? 'Hide inactive players'
+                : `Show inactive players (${inactiveCount})`
+              }
+            </button>
+          )}
         </section>
       )}
 
