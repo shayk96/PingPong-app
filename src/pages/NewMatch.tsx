@@ -165,9 +165,16 @@ export default function NewMatch() {
   }
 
   // Sort players alphabetically
-  const sortedPlayers = [...players].sort((a, b) => 
-    a.displayName.localeCompare(b.displayName)
+  const sortedPlayers = useMemo(
+    () => [...players].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    [players]
   )
+  const [playerSearch, setPlayerSearch] = useState('')
+  const filteredPlayers = useMemo(() => {
+    if (!playerSearch.trim()) return sortedPlayers
+    const q = playerSearch.trim().toLowerCase()
+    return sortedPlayers.filter(p => p.displayName.toLowerCase().includes(q))
+  }, [sortedPlayers, playerSearch])
 
   const selectPlayer = (player: User, slot: 'A' | 'B') => {
     if (slot === 'A') {
@@ -238,9 +245,20 @@ export default function NewMatch() {
             {playerA && playerB ? 'Matchup' : 'Select Players'}
           </label>
 
+          {players.length > 4 && (
+            <input
+              type="search"
+              value={playerSearch}
+              onChange={(e) => setPlayerSearch(e.target.value)}
+              placeholder="Search players..."
+              className="w-full mb-3 px-3 py-2 rounded-xl bg-background border border-background-lighter text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+              aria-label="Search players"
+            />
+          )}
+
           {/* Player list */}
           <div className="grid grid-cols-2 gap-2">
-            {sortedPlayers.map((player) => {
+            {filteredPlayers.map((player) => {
               const isSelectedA = playerA?.id === player.id
               const isSelectedB = playerB?.id === player.id
               const isSelected = isSelectedA || isSelectedB
@@ -280,6 +298,9 @@ export default function NewMatch() {
               )
             })}
           </div>
+          {playerSearch.trim() && filteredPlayers.length === 0 && (
+            <p className="mt-2 text-xs text-gray-500 text-center">No players match your search</p>
+          )}
 
           {/* VS display with names, H2H record, and blended win probability */}
           {playerA && playerB && winProb && (

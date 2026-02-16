@@ -44,6 +44,7 @@ export default function Leaderboard() {
   const [showH2HModal, setShowH2HModal] = useState(false)
   const [h2hPlayerA, setH2hPlayerA] = useState<User | null>(null)
   const [h2hPlayerB, setH2hPlayerB] = useState<User | null>(null)
+  const [h2hPlayerSearch, setH2hPlayerSearch] = useState('')
 
   // Undo state
   const [undoing, setUndoing] = useState(false)
@@ -109,6 +110,11 @@ export default function Leaderboard() {
     [...players].sort((a, b) => a.displayName.localeCompare(b.displayName)),
     [players]
   )
+  const filteredH2hPlayers = useMemo(() => {
+    if (!h2hPlayerSearch.trim()) return sortedPlayers
+    const q = h2hPlayerSearch.trim().toLowerCase()
+    return sortedPlayers.filter(p => p.displayName.toLowerCase().includes(q))
+  }, [sortedPlayers, h2hPlayerSearch])
 
   // Get Head to Head matches and stats (with matches grouped by date)
   const h2hData = useMemo(() => {
@@ -247,6 +253,7 @@ export default function Leaderboard() {
   const openH2HModal = () => {
     setH2hPlayerA(null)
     setH2hPlayerB(null)
+    setH2hPlayerSearch('')
     setShowH2HModal(true)
   }
 
@@ -534,8 +541,18 @@ export default function Leaderboard() {
       >
         <div className="space-y-4">
           {/* Player selection: 2-column grid with slot badges */}
+          {players.length > 4 && (
+            <input
+              type="search"
+              value={h2hPlayerSearch}
+              onChange={(e) => setH2hPlayerSearch(e.target.value)}
+              placeholder="Search players..."
+              className="w-full px-3 py-2 rounded-xl bg-background border border-background-lighter text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+              aria-label="Search players"
+            />
+          )}
           <div className="grid grid-cols-2 gap-2">
-            {sortedPlayers.map((player) => {
+            {filteredH2hPlayers.map((player) => {
               const isSlotA = h2hPlayerA?.id === player.id
               const isSlotB = h2hPlayerB?.id === player.id
               const selected = isSlotA || isSlotB
@@ -559,6 +576,9 @@ export default function Leaderboard() {
               )
             })}
           </div>
+          {h2hPlayerSearch.trim() && filteredH2hPlayers.length === 0 && (
+            <p className="text-xs text-gray-500 text-center">No players match your search</p>
+          )}
 
           {/* VS summary card (when both selected) */}
           {h2hData && h2hPlayerA && h2hPlayerB && (

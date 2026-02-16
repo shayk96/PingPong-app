@@ -57,7 +57,18 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([])
   const [eloHistory, setEloHistory] = useState<EloHistoryEntry[]>([])
   const [loading, setLoading] = useState(false)
+  const [playerSearch, setPlayerSearch] = useState('')
   const chartRef = useRef<any>(null)
+
+  const sortedPlayers = useMemo(
+    () => [...players].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    [players]
+  )
+  const filteredPlayers = useMemo(() => {
+    if (!playerSearch.trim()) return sortedPlayers
+    const q = playerSearch.trim().toLowerCase()
+    return sortedPlayers.filter(p => p.displayName.toLowerCase().includes(q))
+  }, [sortedPlayers, playerSearch])
 
   // Reset zoom function
   const resetZoom = () => {
@@ -246,8 +257,18 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
               </button>
             )}
           </div>
+          {players.length > 4 && (
+            <input
+              type="search"
+              value={playerSearch}
+              onChange={(e) => setPlayerSearch(e.target.value)}
+              placeholder="Search players..."
+              className="w-full mb-2 px-3 py-2 rounded-xl bg-background border border-background-lighter text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+              aria-label="Search players"
+            />
+          )}
           <div className="grid grid-cols-2 gap-2">
-            {[...players].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((player) => {
+            {filteredPlayers.map((player) => {
               const isSelected = selectedPlayerIds.includes(player.id)
               const colorIndex = selectedPlayerIds.indexOf(player.id)
               const color = colorIndex >= 0 ? PLAYER_COLORS[colorIndex % PLAYER_COLORS.length] : null
@@ -279,7 +300,10 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
               )
             })}
           </div>
-          {selectedPlayerIds.length === 0 && (
+          {playerSearch.trim() && filteredPlayers.length === 0 && (
+            <p className="text-xs text-gray-500 mt-2 text-center">No players match your search</p>
+          )}
+          {selectedPlayerIds.length === 0 && !playerSearch.trim() && (
             <p className="text-xs text-gray-500 mt-2 text-center">Tap players to add them to the graph</p>
           )}
         </div>
