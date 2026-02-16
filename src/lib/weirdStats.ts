@@ -342,29 +342,28 @@ const mostFrequentMatchup: StatGenerator = (matches, players) => {
 }
 
 /**
- * "X has won Y of their last Z first-to-21 games"
+ * "X has won Y of their last Z first-to-11 games"
  */
 const matchTypeSpecialist: StatGenerator = (matches, players) => {
+  const type = 11
   for (const player of players) {
-    for (const type of [21, 11] as const) {
-      const typeMatches = matches
-        .filter(m =>
-          (m.winnerId === player.id || m.loserId === player.id) &&
-          m.matchType === type
-        )
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-        .slice(0, 8)
+    const typeMatches = matches
+      .filter(m =>
+        (m.winnerId === player.id || m.loserId === player.id) &&
+        m.matchType === type
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 8)
 
-      if (typeMatches.length < 4) continue
+    if (typeMatches.length < 4) continue
 
-      const wins = typeMatches.filter(m => m.winnerId === player.id).length
-      const rate = wins / typeMatches.length
+    const wins = typeMatches.filter(m => m.winnerId === player.id).length
+    const rate = wins / typeMatches.length
 
-      if (rate >= 0.85) {
-        return {
-          text: `${player.displayName} has won ${wins} of their last ${typeMatches.length} first-to-${type} games`,
-          emoji: type === 21 ? '🏅' : '⚡'
-        }
+    if (rate >= 0.85) {
+      return {
+        text: `${player.displayName} has won ${wins} of their last ${typeMatches.length} first-to-11 games`,
+        emoji: '⚡'
       }
     }
   }

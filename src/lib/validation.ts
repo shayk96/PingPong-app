@@ -2,7 +2,7 @@
  * Match Validation Logic
  * 
  * Ensures matches are valid according to ping pong rules:
- * - Proper scoring (first to 11 or 21)
+ * - Proper scoring (first to 11)
  * - Win by 2 rule (deuce handling)
  * - Different players
  */
@@ -14,7 +14,7 @@ import type { NewMatchInput, ValidationResult } from '../types'
  * 
  * Rules:
  * 1. Players must be different (can't play against yourself)
- * 2. Match type must be 11 or 21
+ * 2. Match type must be 11
  * 3. Winner must reach exactly the target score (or target + 1 in deuce)
  * 4. Loser must have fewer points than winner
  * 5. Win by 2 rule: if loser has target-1 points, winner needs target+1
@@ -33,11 +33,11 @@ export function validateMatch(input: NewMatchInput): ValidationResult {
     }
   }
 
-  // Rule 2: Valid match type
-  if (matchType !== 11 && matchType !== 21) {
+  // Rule 2: Valid match type (all games first to 11)
+  if (matchType !== 11) {
     return {
       isValid: false,
-      error: 'Match type must be 11 or 21'
+      error: 'Match type must be 11'
     }
   }
 
@@ -136,10 +136,7 @@ export function validateScoreInput(score: string): { isValid: boolean; value: nu
  * Get example valid scores for a match type
  * Used in UI hints
  */
-export function getScoreExamples(matchType: 11 | 21): string[] {
-  if (matchType === 11) {
-    return ['11-8', '11-9', '12-10', '13-11']
-  }
-  return ['21-18', '21-19', '22-20', '23-21']
+export function getScoreExamples(matchType: 11): string[] {
+  return ['11-8', '11-9', '12-10', '13-11']
 }
 

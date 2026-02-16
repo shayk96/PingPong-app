@@ -6,7 +6,7 @@
 import { useState, useMemo } from 'react'
 import { Button, Select, Input } from '../ui'
 import { validateMatch, getScoreExamples } from '../../lib/validation'
-import type { User, MatchType, NewMatchInput } from '../../types'
+import type { User, NewMatchInput } from '../../types'
 
 interface MatchFormProps {
   players: User[]
@@ -20,7 +20,7 @@ export function MatchForm({ players, currentUserId, onSubmit, loading }: MatchFo
   const [playerBId, setPlayerBId] = useState('')
   const [playerAScore, setPlayerAScore] = useState('')
   const [playerBScore, setPlayerBScore] = useState('')
-  const [matchType, setMatchType] = useState<MatchType>(11)
+  const matchType = 11 as const
   const [error, setError] = useState<string | null>(null)
 
   // Get player options (excluding already selected player)
@@ -77,41 +77,6 @@ export function MatchForm({ players, currentUserId, onSubmit, loading }: MatchFo
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Match Type Toggle */}
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Match Type
-        </label>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setMatchType(11)}
-            className={`
-              flex-1 py-3 rounded-xl font-semibold transition-all
-              ${matchType === 11 
-                ? 'bg-accent text-white shadow-lg shadow-accent/25' 
-                : 'bg-background-lighter text-gray-300 hover:bg-gray-600'
-              }
-            `}
-          >
-            First to 11
-          </button>
-          <button
-            type="button"
-            onClick={() => setMatchType(21)}
-            className={`
-              flex-1 py-3 rounded-xl font-semibold transition-all
-              ${matchType === 21 
-                ? 'bg-accent text-white shadow-lg shadow-accent/25' 
-                : 'bg-background-lighter text-gray-300 hover:bg-gray-600'
-              }
-            `}
-          >
-            First to 21
-          </button>
-        </div>
-      </div>
-
       {/* Player Selection */}
       <div className="grid grid-cols-2 gap-4">
         <Select

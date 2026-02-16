@@ -31,8 +31,8 @@ export interface OpponentStat {
   losses: number
 }
 
-// Match types
-export type MatchType = 11 | 21
+// Match type: all games are first to 11
+export type MatchType = 11
 
 export interface Match {
   id: string
@@ -42,7 +42,7 @@ export interface Match {
   playerBScore: number
   winnerId: string
   loserId: string
-  matchType: MatchType
+  matchType: number // 11 (21 only for legacy matches)
   winnerEloDelta: number
   loserEloDelta: number
   createdAt: Date

@@ -10,7 +10,7 @@ import { useMatches } from '../hooks/useMatches'
 import { validateMatch } from '../lib/validation'
 import { expectedScore } from '../lib/elo'
 import { ToastContainer, useToast, Button } from '../components/ui'
-import type { NewMatchInput, MatchType, User } from '../types'
+import type { NewMatchInput, User } from '../types'
 
 interface GameEntry {
   playerAScore: string
@@ -28,7 +28,7 @@ export default function NewMatch() {
   const [playerA, setPlayerA] = useState<User | null>(null)
   const [playerB, setPlayerB] = useState<User | null>(null)
   const [games, setGames] = useState<GameEntry[]>([{ playerAScore: '', playerBScore: '' }])
-  const [matchType, setMatchType] = useState<MatchType>(11)
+  const matchType = 11 as const // All games first to 11
   const [gameErrors, setGameErrors] = useState<(string | null)[]>([])
   const scoreInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
   const [focusTarget, setFocusTarget] = useState<string | null>(null)
@@ -232,36 +232,6 @@ export default function NewMatch() {
       {/* Match Form */}
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Match Type */}
-        <div className="bg-background-light rounded-2xl p-4 border border-background-lighter">
-          <label className="block text-sm font-medium text-gray-300 mb-3">
-            Game Type
-          </label>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => setMatchType(11)}
-              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
-                matchType === 11
-                  ? 'bg-accent text-white'
-                  : 'bg-background text-gray-400 hover:bg-background-lighter'
-              }`}
-            >
-              First to 11
-            </button>
-            <button
-              type="button"
-              onClick={() => setMatchType(21)}
-              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
-                matchType === 21
-                  ? 'bg-accent text-white'
-                  : 'bg-background text-gray-400 hover:bg-background-lighter'
-              }`}
-            >
-              First to 21
-            </button>
-          </div>
-        </div>
-
         {/* Players Selection */}
         <div className="bg-background-light rounded-2xl p-4 border border-background-lighter">
           <label className="block text-sm font-medium text-gray-300 mb-3">

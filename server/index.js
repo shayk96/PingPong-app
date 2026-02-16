@@ -351,7 +351,7 @@ app.post('/api/matches', async (req, res) => {
       playerBScore,
       winnerId,
       loserId,
-      matchType: matchType || 11,
+      matchType: 11, // All games first to 11
       winnerEloDelta: winnerDelta,
       loserEloDelta: loserDelta,
       createdAt: new Date()
