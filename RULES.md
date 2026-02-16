@@ -81,21 +81,7 @@ This prevents new players from immediately topping the leaderboard after just 1-
 - You are **hidden** from the leaderboard
 - Your data is **still saved** in the database
 - You can return at any time
-
-### Return Penalty
-When you play your first match after being inactive:
-- **-7 ELO per day** of total inactivity (counted from day 1)
-- Minimum ELO is capped at 100
-
-| Days Inactive | Penalty | Hidden from Leaderboard? |
-|---------------|---------|--------------------------|
-| 7 days | -49 ELO | No |
-| 14 days | -98 ELO | No |
-| 15 days | -105 ELO | Yes |
-| 21 days | -147 ELO | Yes |
-| 30 days | -210 ELO | Yes |
-
-**Example:** If you're at 1200 ELO and don't play for 31 days, when you return and play a match, you'll first lose 217 ELO (7 × 31), dropping to 983, then the match result is applied.
+- **No ELO penalty** when you return; your rating is unchanged until you play matches
 
 ---
 

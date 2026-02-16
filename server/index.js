@@ -80,24 +80,7 @@ function generateId() {
 
 // ============ Inactivity Settings ============
 
-const INACTIVITY_GRACE_DAYS = 14 // Days before player is hidden
-const INACTIVITY_PENALTY_PER_DAY = 7 // ELO penalty per day of inactivity
-
-/**
- * Calculate inactivity penalty for a player returning after being inactive
- * Penalty is applied from day 1, not after grace period
- */
-function calculateInactivityPenalty(lastPlayedAt) {
-  if (!lastPlayedAt) return 0
-  
-  const now = new Date()
-  const daysSinceLastPlayed = Math.floor((now - new Date(lastPlayedAt)) / (1000 * 60 * 60 * 24))
-  
-  // Only apply penalty if player was inactive
-  if (daysSinceLastPlayed <= 0) return 0
-  
-  return daysSinceLastPlayed * INACTIVITY_PENALTY_PER_DAY
-}
+const INACTIVITY_GRACE_DAYS = 14 // Days before player is hidden (no ELO penalty on return)
 
 /**
  * Check if player should be hidden (inactive for more than grace period)
@@ -330,24 +313,6 @@ app.post('/api/matches', async (req, res) => {
     
     if (!playerA || !playerB) {
       return res.status(400).json({ error: 'Invalid player selection' })
-    }
-
-    // Apply inactivity penalties before calculating match results
-    const playerAPenalty = calculateInactivityPenalty(playerA.lastPlayedAt)
-    const playerBPenalty = calculateInactivityPenalty(playerB.lastPlayedAt)
-    
-    // Apply penalties if any
-    if (playerAPenalty > 0) {
-      const newRating = Math.max(100, playerA.eloRating - playerAPenalty)
-      await User.updateOne({ id: playerAId }, { eloRating: newRating })
-      playerA.eloRating = newRating
-      console.log(`📉 Applied inactivity penalty to ${playerA.displayName}: -${playerAPenalty} ELO`)
-    }
-    if (playerBPenalty > 0) {
-      const newRating = Math.max(100, playerB.eloRating - playerBPenalty)
-      await User.updateOne({ id: playerBId }, { eloRating: newRating })
-      playerB.eloRating = newRating
-      console.log(`📉 Applied inactivity penalty to ${playerB.displayName}: -${playerBPenalty} ELO`)
     }
 
     // Determine winner and loser
