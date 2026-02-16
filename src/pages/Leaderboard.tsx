@@ -108,12 +108,12 @@ export default function Leaderboard() {
     [players]
   )
 
-  // Get Head to Head matches and stats
+  // Get Head to Head matches and stats (with matches grouped by date)
   const h2hData = useMemo(() => {
     if (!h2hPlayerA || !h2hPlayerB) return null
 
     const h2hMatches = matches
-      .filter(m => 
+      .filter(m =>
         (m.playerAId === h2hPlayerA.id && m.playerBId === h2hPlayerB.id) ||
         (m.playerAId === h2hPlayerB.id && m.playerBId === h2hPlayerA.id)
       )
@@ -121,14 +121,45 @@ export default function Leaderboard() {
 
     const playerAWins = h2hMatches.filter(m => m.winnerId === h2hPlayerA.id).length
     const playerBWins = h2hMatches.filter(m => m.winnerId === h2hPlayerB.id).length
+    const total = h2hMatches.length
+    const winPctA = total > 0 ? Math.round((playerAWins / total) * 100) : 50
+    const winPctB = total > 0 ? Math.round((playerBWins / total) * 100) : 50
+
+    // Group matches by date for display
+    const byDate: { label: string; matches: typeof h2hMatches }[] = []
+    let currentLabel = ''
+    for (const m of h2hMatches) {
+      const label = formatH2HDateLabel(m.createdAt)
+      if (label !== currentLabel) {
+        currentLabel = label
+        byDate.push({ label, matches: [] })
+      }
+      byDate[byDate.length - 1].matches.push(m)
+    }
 
     return {
       matches: h2hMatches,
+      byDate,
       playerAWins,
       playerBWins,
-      total: h2hMatches.length
+      total,
+      winPctA,
+      winPctB,
     }
   }, [h2hPlayerA, h2hPlayerB, matches])
+
+  function formatH2HDateLabel(date: Date): string {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const yesterday = new Date(today.getTime() - 86400000)
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    if (d.getTime() === today.getTime()) return 'Today'
+    if (d.getTime() === yesterday.getTime()) return 'Yesterday'
+    const diffDays = Math.floor((today.getTime() - d.getTime()) / 86400000)
+    if (diffDays < 7) return date.toLocaleDateString('en-US', { weekday: 'long' })
+    if (date.getFullYear() === now.getFullYear()) return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
 
   const handleAddPlayer = async () => {
     if (!newPlayerName.trim()) {
@@ -229,6 +260,13 @@ export default function Leaderboard() {
     }
   }
 
+  const swapH2HPlayers = () => {
+    if (h2hPlayerA && h2hPlayerB) {
+      setH2hPlayerA(h2hPlayerB)
+      setH2hPlayerB(h2hPlayerA)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -304,16 +342,7 @@ export default function Leaderboard() {
         <WeirdStatsBanner matches={matches} players={players} />
       )}
 
-      {/* Head to Head Button */}
-      {players.length >= 2 && (
-        <button
-          onClick={openH2HModal}
-          className="w-full mb-4 p-3 bg-gradient-to-r from-accent/20 to-primary/20 border border-accent/30 rounded-xl text-white font-medium flex items-center justify-center gap-2 hover:from-accent/30 hover:to-primary/30 transition-all"
-        >
-          <span>⚔️</span>
-          <span>Head to Head</span>
-        </button>
-      )}
+      {/* Head to Head button removed for now (code kept in modal/state/handlers) */}
 
       {/* Rankings */}
       {players.length > 0 && (
@@ -487,86 +516,65 @@ export default function Leaderboard() {
         isOpen={showH2HModal}
         onClose={() => setShowH2HModal(false)}
         title="Head to Head"
+        maxWidth="md"
       >
         <div className="space-y-4">
-          {/* Selected Players Display */}
-          <div className="grid grid-cols-2 gap-3">
-            <div 
-              className={`p-4 rounded-xl border-2 border-dashed text-center transition-all ${
-                h2hPlayerA 
-                  ? 'border-accent bg-accent/10' 
-                  : 'border-background-lighter'
-              }`}
-            >
-              {h2hPlayerA ? (
-                <div>
-                  <div className="text-white font-semibold">{h2hPlayerA.displayName}</div>
-                  <div className="text-xs text-gray-400">{h2hPlayerA.eloRating} ELO</div>
-                </div>
-              ) : (
-                <div className="text-gray-500 text-sm">Player 1</div>
-              )}
-            </div>
-            <div 
-              className={`p-4 rounded-xl border-2 border-dashed text-center transition-all ${
-                h2hPlayerB 
-                  ? 'border-accent bg-accent/10' 
-                  : 'border-background-lighter'
-              }`}
-            >
-              {h2hPlayerB ? (
-                <div>
-                  <div className="text-white font-semibold">{h2hPlayerB.displayName}</div>
-                  <div className="text-xs text-gray-400">{h2hPlayerB.eloRating} ELO</div>
-                </div>
-              ) : (
-                <div className="text-gray-500 text-sm">Player 2</div>
-              )}
-            </div>
-          </div>
-
-          {/* Player Grid */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* Player selection: 2-column grid with slot badges */}
+          <div className="grid grid-cols-2 gap-2">
             {sortedPlayers.map((player) => {
-              const isSelectedA = h2hPlayerA?.id === player.id
-              const isSelectedB = h2hPlayerB?.id === player.id
-              const isSelected = isSelectedA || isSelectedB
-              
+              const isSlotA = h2hPlayerA?.id === player.id
+              const isSlotB = h2hPlayerB?.id === player.id
+              const selected = isSlotA || isSlotB
               return (
                 <button
                   key={player.id}
                   type="button"
                   onClick={() => selectH2HPlayer(player)}
-                  className={`p-3 rounded-xl text-sm font-medium transition-all ${
-                    isSelected
-                      ? 'bg-accent text-white'
-                      : 'bg-background text-gray-300 hover:bg-background-lighter'
+                  className={`flex items-center gap-2 p-3 rounded-xl text-left transition-all border ${
+                    selected
+                      ? 'border-accent bg-accent/15 text-white'
+                      : 'border-background-lighter bg-background text-gray-300 hover:bg-background-lighter'
                   }`}
                 >
-                  {player.displayName}
+                  {isSlotA && <span className="flex-shrink-0 w-5 h-5 rounded-full bg-accent/80 text-white text-xs font-bold flex items-center justify-center">1</span>}
+                  {isSlotB && <span className="flex-shrink-0 w-5 h-5 rounded-full bg-accent/80 text-white text-xs font-bold flex items-center justify-center">2</span>}
+                  {!selected && <span className="flex-shrink-0 w-5 h-5 rounded-full border border-gray-600 text-gray-500 text-xs flex items-center justify-center">+</span>}
+                  <span className="font-medium truncate">{player.displayName}</span>
+                  {selected && <span className="text-xs text-gray-400 flex-shrink-0">{player.eloRating}</span>}
                 </button>
               )
             })}
           </div>
 
-          {/* H2H Stats & Matches */}
+          {/* VS summary card (when both selected) */}
           {h2hData && h2hPlayerA && h2hPlayerB && (
             <>
-              {/* Score Summary */}
-              <div className="bg-background rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-center flex-1">
-                    <div className={`text-3xl font-bold ${h2hData.playerAWins > h2hData.playerBWins ? 'text-success' : 'text-white'}`}>
+              <div className="bg-background rounded-xl p-4 border border-background-lighter">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0 text-center">
+                    <div className="text-white font-semibold truncate">{h2hPlayerA.displayName}</div>
+                    <div className={`text-2xl font-bold ${h2hData.playerAWins > h2hData.playerBWins ? 'text-success' : 'text-white'}`}>
                       {h2hData.playerAWins}
                     </div>
-                    <div className="text-sm text-gray-400">{h2hPlayerA.displayName}</div>
+                    <div className="text-xs text-gray-500">{h2hData.total > 0 ? `${h2hData.winPctA}%` : '–'}</div>
                   </div>
-                  <div className="text-gray-500 text-xl px-4">-</div>
-                  <div className="text-center flex-1">
-                    <div className={`text-3xl font-bold ${h2hData.playerBWins > h2hData.playerAWins ? 'text-success' : 'text-white'}`}>
+                  <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                    <span className="text-gray-500 text-sm font-medium">VS</span>
+                    <button
+                      type="button"
+                      onClick={swapH2HPlayers}
+                      className="text-xs text-gray-400 hover:text-accent transition-colors"
+                      title="Swap players"
+                    >
+                      swap
+                    </button>
+                  </div>
+                  <div className="flex-1 min-w-0 text-center">
+                    <div className="text-white font-semibold truncate">{h2hPlayerB.displayName}</div>
+                    <div className={`text-2xl font-bold ${h2hData.playerBWins > h2hData.playerAWins ? 'text-success' : 'text-white'}`}>
                       {h2hData.playerBWins}
                     </div>
-                    <div className="text-sm text-gray-400">{h2hPlayerB.displayName}</div>
+                    <div className="text-xs text-gray-500">{h2hData.total > 0 ? `${h2hData.winPctB}%` : '–'}</div>
                   </div>
                 </div>
                 <div className="text-center text-xs text-gray-500 mt-2">
@@ -574,41 +582,44 @@ export default function Leaderboard() {
                 </div>
               </div>
 
-              {/* Match List */}
-              <div className="max-h-48 overflow-y-auto space-y-2">
-                {h2hData.matches.length > 0 ? (
-                  h2hData.matches.map((match) => {
-                    const aIsPlayerA = match.playerAId === h2hPlayerA.id
-                    const scoreA = aIsPlayerA ? match.playerAScore : match.playerBScore
-                    const scoreB = aIsPlayerA ? match.playerBScore : match.playerAScore
-                    const winnerIsA = match.winnerId === h2hPlayerA.id
-
-                    return (
-                      <div
-                        key={match.id}
-                        className="p-3 rounded-xl bg-background-lighter flex items-center justify-between"
-                      >
-                        <div className="text-xs text-gray-400">
-                          {match.createdAt.toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`font-bold ${winnerIsA ? 'text-success' : 'text-gray-400'}`}>
-                            {scoreA}
-                          </span>
-                          <span className="text-gray-500">-</span>
-                          <span className={`font-bold ${!winnerIsA ? 'text-success' : 'text-gray-400'}`}>
-                            {scoreB}
-                          </span>
-                        </div>
+              {/* Match list with date dividers */}
+              <div className="max-h-52 overflow-y-auto space-y-3">
+                {h2hData.byDate.length > 0 ? (
+                  h2hData.byDate.map((group) => (
+                    <div key={group.label}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="h-px flex-1 bg-background-lighter" />
+                        <span className="text-xs font-medium text-gray-500">{group.label}</span>
+                        <div className="h-px flex-1 bg-background-lighter" />
                       </div>
-                    )
-                  })
+                      <div className="space-y-1">
+                        {group.matches.map((match) => {
+                          const aIsPlayerA = match.playerAId === h2hPlayerA.id
+                          const scoreA = aIsPlayerA ? match.playerAScore : match.playerBScore
+                          const scoreB = aIsPlayerA ? match.playerBScore : match.playerAScore
+                          const winnerIsA = match.winnerId === h2hPlayerA.id
+                          return (
+                            <div
+                              key={match.id}
+                              className="p-2.5 rounded-lg bg-background-lighter flex items-center justify-between"
+                            >
+                              <span className="text-xs text-gray-500">
+                                {match.createdAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-sm font-bold w-6 text-right ${winnerIsA ? 'text-success' : 'text-gray-400'}`}>{scoreA}</span>
+                                <span className="text-gray-600">–</span>
+                                <span className={`text-sm font-bold w-6 ${!winnerIsA ? 'text-success' : 'text-gray-400'}`}>{scoreB}</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))
                 ) : (
-                  <div className="text-center py-6 text-gray-400">
-                    <p>No matches between these players yet</p>
+                  <div className="text-center py-6 text-gray-400 text-sm">
+                    No matches between these players yet
                   </div>
                 )}
               </div>
