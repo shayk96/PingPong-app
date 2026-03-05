@@ -352,11 +352,6 @@ app.post('/api/players', async (req, res) => {
 // Delete a player (password protected)
 app.delete('/api/players/:id', async (req, res) => {
   const { id } = req.params
-  const { password } = req.body || {}
-  
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(403).json({ error: 'Invalid password' })
-  }
 
   try {
     const player = await User.findOne({ id })

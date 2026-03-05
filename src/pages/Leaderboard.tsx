@@ -33,7 +33,6 @@ export default function Leaderboard() {
   const [showDeletePlayerModal, setShowDeletePlayerModal] = useState(false)
   const [deletePlayerId, setDeletePlayerId] = useState('')
   const [deletePlayerName, setDeletePlayerName] = useState('')
-  const [deletePlayerPassword, setDeletePlayerPassword] = useState('')
   const [deletingPlayer, setDeletingPlayer] = useState(false)
 
   // Delete match modal state
@@ -239,23 +238,16 @@ export default function Leaderboard() {
   const handleDeletePlayerClick = (playerId: string, playerName: string) => {
     setDeletePlayerId(playerId)
     setDeletePlayerName(playerName)
-    setDeletePlayerPassword('')
     setShowDeletePlayerModal(true)
   }
 
   const handleDeletePlayer = async () => {
-    if (!deletePlayerPassword) {
-      showToast('Please enter the admin password', 'error')
-      return
-    }
-
     setDeletingPlayer(true)
     try {
-      await deletePlayer(deletePlayerId, deletePlayerPassword)
+      await deletePlayer(deletePlayerId)
       await refreshMatches()
       showToast(`${deletePlayerName} deleted successfully!`, 'success')
       setShowDeletePlayerModal(false)
-      setDeletePlayerPassword('')
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : 'Failed to delete player',
@@ -546,18 +538,6 @@ export default function Leaderboard() {
               This will permanently delete <strong className="text-white">{deletePlayerName}</strong> and all their match history. This action cannot be undone.
             </p>
           </div>
-          
-          <Input
-            label="Admin Password"
-            type="password"
-            value={deletePlayerPassword}
-            onChange={(e) => setDeletePlayerPassword(e.target.value)}
-            placeholder="Enter admin password"
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleDeletePlayer()
-            }}
-          />
           
           <div className="flex gap-3">
             <Button
