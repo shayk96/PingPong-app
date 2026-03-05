@@ -6,6 +6,7 @@ function toSeason(raw: SeasonResponse): Season {
   return {
     ...raw,
     startedAt: new Date(raw.startedAt),
+    endsAt: raw.endsAt ? new Date(raw.endsAt) : null,
     endedAt: raw.endedAt ? new Date(raw.endedAt) : null,
   }
 }

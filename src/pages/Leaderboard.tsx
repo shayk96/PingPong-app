@@ -17,7 +17,7 @@ import type { User } from '../types'
 export default function Leaderboard() {
   const { players, loading: playersLoading, addPlayer, deletePlayer, refresh: refreshPlayers } = usePlayers()
   const { matches, loading: matchesLoading, deleteMatch, undoMatch, refresh: refreshMatches } = useMatches()
-  const { currentSeason, pastSeasons, loading: seasonLoading, endCurrentSeason, refresh: refreshSeason } = useSeason()
+  const { currentSeason, pastSeasons, loading: seasonLoading, refresh: refreshSeason } = useSeason()
   const [showInactivePlayers, setShowInactivePlayers] = useState(false)
   const leaderboard = useLeaderboard(players, matches, showInactivePlayers)
   const recentMatches = useRecentMatchesWithPlayers(matches, players, 10)
@@ -42,11 +42,8 @@ export default function Leaderboard() {
   const [deleteMatchInfo, setDeleteMatchInfo] = useState('')
   const [deletingMatch, setDeletingMatch] = useState(false)
 
-  // End Season modal state
-  const [showEndSeasonModal, setShowEndSeasonModal] = useState(false)
-  const [endSeasonPassword, setEndSeasonPassword] = useState('')
-  const [endingSeason, setEndingSeason] = useState(false)
-  const [seasonResult, setSeasonResult] = useState<{ winner: { id: string; displayName: string } | null; endedSeason: number } | null>(null)
+  // Season countdown state
+  const [seasonTimeLeft, setSeasonTimeLeft] = useState('')
 
   // Head to Head modal state
   const [showH2HModal, setShowH2HModal] = useState(false)
@@ -87,6 +84,38 @@ export default function Leaderboard() {
     return () => clearInterval(interval)
   }, [undoableMatch])
 
+  // Season countdown timer -- reads end date from the season API
+  useEffect(() => {
+    if (!currentSeason?.endsAt) {
+      setSeasonTimeLeft('')
+      return
+    }
+    const endDate = currentSeason.endsAt.getTime()
+
+    const tick = () => {
+      const diff = endDate - Date.now()
+      if (diff <= 0) {
+        setSeasonTimeLeft('Season ended!')
+        refreshSeason()
+        refreshPlayers()
+        return
+      }
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+
+      if (days > 0) {
+        setSeasonTimeLeft(`${days}d ${hours}h ${minutes}m ${seconds}s`)
+      } else {
+        setSeasonTimeLeft(`${hours}h ${minutes}m ${seconds}s`)
+      }
+    }
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [currentSeason?.endsAt])
+
   const formatTimeLeft = useCallback((ms: number) => {
     const totalSeconds = Math.ceil(ms / 1000)
     const minutes = Math.floor(totalSeconds / 60)
@@ -110,6 +139,14 @@ export default function Leaderboard() {
       setUndoing(false)
     }
   }
+
+  const seasonStartDate = useMemo(() => {
+    if (!currentSeason) return null
+    const seasonMatches = matches.filter(m => m.seasonNumber === currentSeason.seasonNumber)
+    if (seasonMatches.length === 0) return null
+    const oldest = seasonMatches.reduce((a, b) => a.createdAt.getTime() < b.createdAt.getTime() ? a : b)
+    return oldest.createdAt
+  }, [matches, currentSeason])
 
   const loading = playersLoading || matchesLoading || seasonLoading
 
@@ -253,28 +290,6 @@ export default function Leaderboard() {
   }
 
 
-  const handleEndSeason = async () => {
-    if (!endSeasonPassword) {
-      showToast('Please enter the admin password', 'error')
-      return
-    }
-
-    setEndingSeason(true)
-    try {
-      const result = await endCurrentSeason(endSeasonPassword)
-      setSeasonResult({ winner: result.winner, endedSeason: result.endedSeason })
-      await Promise.all([refreshPlayers(), refreshMatches()])
-      setEndSeasonPassword('')
-    } catch (err) {
-      showToast(
-        err instanceof Error ? err.message : 'Failed to end season',
-        'error'
-      )
-    } finally {
-      setEndingSeason(false)
-    }
-  }
-
   const handleRefresh = async () => {
     await Promise.all([refreshPlayers(), refreshMatches(), refreshSeason()])
     showToast('Data refreshed!', 'success')
@@ -358,20 +373,18 @@ export default function Leaderboard() {
                   Season {currentSeason.seasonNumber}
                 </div>
                 <div className="text-xs text-gray-400">
-                  Started {currentSeason.startedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {seasonStartDate
+                    ? `Started ${seasonStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                    : 'No matches yet'}
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => {
-                setEndSeasonPassword('')
-                setSeasonResult(null)
-                setShowEndSeasonModal(true)
-              }}
-              className="px-3 py-1.5 rounded-lg bg-accent/15 border border-accent/30 text-accent text-xs font-medium hover:bg-accent/25 transition-all"
-            >
-              End Season
-            </button>
+            {seasonTimeLeft && (
+              <div className="text-right">
+                <div className="text-xs text-gray-400">Ends in</div>
+                <div className="text-sm font-mono font-bold text-accent">{seasonTimeLeft}</div>
+              </div>
+            )}
           </div>
           {/* Previous season winner announcement */}
           {pastSeasons.length > 0 && pastSeasons[0].winnerName && (
@@ -735,100 +748,6 @@ export default function Leaderboard() {
           >
             Close
           </Button>
-        </div>
-      </Modal>
-
-      {/* End Season Modal */}
-      <Modal
-        isOpen={showEndSeasonModal}
-        onClose={() => { setShowEndSeasonModal(false); setSeasonResult(null) }}
-        title={seasonResult ? '🏆 Season Complete!' : 'End Season'}
-      >
-        <div className="space-y-4">
-          {seasonResult ? (
-            <>
-              <div className="text-center py-4">
-                {seasonResult.winner ? (
-                  <>
-                    <div className="text-5xl mb-3">👑</div>
-                    <div className="text-lg text-white font-bold mb-1">
-                      {seasonResult.winner.displayName}
-                    </div>
-                    <div className="text-sm text-yellow-400 font-medium">
-                      Season {seasonResult.endedSeason} Champion
-                    </div>
-                    <p className="text-xs text-gray-400 mt-3">
-                      All ELO ratings have been reset to 800. Stats and match history are preserved.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-5xl mb-3">🏓</div>
-                    <div className="text-sm text-gray-400">
-                      Season {seasonResult.endedSeason} ended with no eligible champion (need 5+ games).
-                    </div>
-                    <p className="text-xs text-gray-400 mt-3">
-                      All ELO ratings have been reset to 800.
-                    </p>
-                  </>
-                )}
-              </div>
-              <Button
-                variant="primary"
-                onClick={() => { setShowEndSeasonModal(false); setSeasonResult(null) }}
-                className="w-full"
-              >
-                Start New Season
-              </Button>
-            </>
-          ) : (
-            <>
-              <div className="bg-accent/10 border border-accent/30 rounded-xl p-4">
-                <p className="text-accent font-medium mb-1">⚠️ End Season {currentSeason?.seasonNumber}?</p>
-                <p className="text-gray-300 text-sm">
-                  This will:
-                </p>
-                <ul className="text-gray-300 text-sm mt-1 space-y-1">
-                  <li>• Award the top player (5+ games) a champion badge</li>
-                  <li>• Reset all ELO ratings to 800</li>
-                  <li>• Start a new season</li>
-                </ul>
-                <p className="text-gray-400 text-xs mt-2">
-                  All-time stats (wins, losses, match history) are preserved.
-                </p>
-              </div>
-
-              <Input
-                label="Admin Password"
-                type="password"
-                value={endSeasonPassword}
-                onChange={(e) => setEndSeasonPassword(e.target.value)}
-                placeholder="Enter admin password"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleEndSeason()
-                }}
-              />
-
-              <div className="flex gap-3">
-                <Button
-                  variant="secondary"
-                  onClick={() => setShowEndSeasonModal(false)}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={handleEndSeason}
-                  loading={endingSeason}
-                  className="flex-1"
-                >
-                  End Season
-                </Button>
-              </div>
-            </>
-          )}
         </div>
       </Modal>
 

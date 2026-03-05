@@ -113,6 +113,7 @@ export async function fetchEloHistory(playerIds?: string[]): Promise<EloHistoryE
 export interface SeasonResponse {
   seasonNumber: number
   startedAt: string
+  endsAt: string | null
   endedAt: string | null
   isActive: boolean
   winnerId: string | null

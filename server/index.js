@@ -74,6 +74,7 @@ const eloHistorySchema = new mongoose.Schema({
 const seasonSchema = new mongoose.Schema({
   seasonNumber: { type: Number, required: true, unique: true },
   startedAt: { type: Date, default: Date.now },
+  endsAt: { type: Date, default: null },
   endedAt: { type: Date, default: null },
   isActive: { type: Boolean, default: true },
   winnerId: { type: String, default: null },
@@ -111,6 +112,108 @@ function isPlayerInactive(lastPlayedAt) {
   const daysSinceLastPlayed = Math.floor((now - new Date(lastPlayedAt)) / (1000 * 60 * 60 * 24))
   
   return daysSinceLastPlayed > INACTIVITY_GRACE_DAYS
+}
+
+// ============ Auto Season End ============
+
+// Season end dates by season number
+const SEASON_END_DATES = {
+  1: new Date('2026-03-27T00:00:00'),
+  2: new Date('2026-06-18T00:00:00'),
+  3: new Date('2026-09-24T00:00:00'),
+  4: new Date('2026-12-24T00:00:00'),
+}
+
+/**
+ * Check if the active season has reached its end date.
+ * If so, automatically end it and start a new one.
+ * Returns the new season if one was created, or null.
+ */
+async function checkAndEndSeason() {
+  try {
+    const currentSeason = await Season.findOne({ isActive: true })
+    if (!currentSeason || !currentSeason.endsAt) return null
+    if (new Date() < new Date(currentSeason.endsAt)) return null
+
+    console.log(`⏰ Season ${currentSeason.seasonNumber} has reached its end date. Ending automatically...`)
+
+    const players = await User.find()
+    const seasonMatches = await Match.find({ seasonNumber: currentSeason.seasonNumber })
+
+    const seasonStats = {}
+    for (const p of players) {
+      seasonStats[p.id] = { wins: 0, losses: 0 }
+    }
+    for (const m of seasonMatches) {
+      if (seasonStats[m.winnerId]) seasonStats[m.winnerId].wins++
+      if (seasonStats[m.loserId]) seasonStats[m.loserId].losses++
+    }
+
+    const eligiblePlayers = players.filter(p => {
+      const s = seasonStats[p.id]
+      return s && (s.wins + s.losses) >= 5
+    })
+
+    let winner = null
+    if (eligiblePlayers.length > 0) {
+      winner = eligiblePlayers.sort((a, b) => b.eloRating - a.eloRating)[0]
+    }
+
+    const finalStandings = players
+      .sort((a, b) => b.eloRating - a.eloRating)
+      .map(p => ({
+        playerId: p.id,
+        displayName: p.displayName,
+        eloRating: p.eloRating,
+        wins: seasonStats[p.id]?.wins || 0,
+        losses: seasonStats[p.id]?.losses || 0
+      }))
+
+    currentSeason.isActive = false
+    currentSeason.endedAt = new Date()
+    currentSeason.winnerId = winner?.id || null
+    currentSeason.winnerName = winner?.displayName || null
+    currentSeason.finalStandings = finalStandings
+    await currentSeason.save()
+
+    if (winner) {
+      await User.updateOne(
+        { id: winner.id },
+        { $addToSet: { seasonWins: currentSeason.seasonNumber } }
+      )
+      console.log(`👑 Season ${currentSeason.seasonNumber} Champion: ${winner.displayName}`)
+    }
+
+    await User.updateMany({}, { $set: { eloRating: 800 } })
+
+    const newSeasonNumber = currentSeason.seasonNumber + 1
+    const newEndsAt = SEASON_END_DATES[newSeasonNumber] || null
+
+    const newSeason = new Season({
+      seasonNumber: newSeasonNumber,
+      startedAt: new Date(),
+      endsAt: newEndsAt,
+      isActive: true
+    })
+    await newSeason.save()
+
+    const now = new Date()
+    const freshHistoryEntries = players.map(p => ({
+      playerId: p.id,
+      eloRating: 800,
+      matchId: null,
+      timestamp: now
+    }))
+    if (freshHistoryEntries.length > 0) {
+      await EloHistory.insertMany(freshHistoryEntries)
+    }
+
+    console.log(`🏆 Season ${newSeasonNumber} started (ends ${newEndsAt.toISOString().slice(0, 10)})`)
+    return newSeason
+  } catch (err) {
+    console.error('Error in auto season end:', err.message)
+    return null
+  }
 }
 
 // ============ Enhanced ELO Calculation ============
@@ -185,6 +288,12 @@ async function migrateFromJsonFiles() {
 }
 
 // ============ API Routes ============
+
+// Auto-end season if the deadline has passed
+app.use('/api', async (req, res, next) => {
+  try { await checkAndEndSeason() } catch (e) { /* non-blocking */ }
+  next()
+})
 
 // Get all players
 app.get('/api/players', async (req, res) => {
@@ -612,6 +721,7 @@ app.post('/api/seasons/end', async (req, res) => {
     const newSeason = new Season({
       seasonNumber: newSeasonNumber,
       startedAt: new Date(),
+      endsAt: SEASON_END_DATES[newSeasonNumber] || null,
       isActive: true
     })
     await newSeason.save()
@@ -1006,14 +1116,21 @@ async function startServer() {
     if (!activeSeason) {
       const lastSeason = await Season.findOne().sort({ seasonNumber: -1 })
       const nextNumber = lastSeason ? lastSeason.seasonNumber + 1 : 1
-      await new Season({ seasonNumber: nextNumber, startedAt: new Date(), isActive: true }).save()
+      const endsAt = SEASON_END_DATES[nextNumber] || null
+      await new Season({ seasonNumber: nextNumber, startedAt: new Date(), endsAt, isActive: true }).save()
       console.log(`🏆 Created Season ${nextNumber}`)
 
-      // Tag any untagged matches as season 1
       if (!lastSeason) {
         await Match.updateMany({ seasonNumber: { $exists: false } }, { $set: { seasonNumber: 1 } })
       }
+    } else if (!activeSeason.endsAt && SEASON_END_DATES[activeSeason.seasonNumber]) {
+      activeSeason.endsAt = SEASON_END_DATES[activeSeason.seasonNumber]
+      await activeSeason.save()
+      console.log(`📅 Set Season ${activeSeason.seasonNumber} end date to ${activeSeason.endsAt.toISOString().slice(0, 10)}`)
     }
+    
+    // Check if season should auto-end right now
+    await checkAndEndSeason()
     
     // ONE-TIME: Recalculate all ELO ratings with current formula
     // This will reset everyone and replay all matches

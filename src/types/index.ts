@@ -106,6 +106,7 @@ export interface SeasonStanding {
 export interface Season {
   seasonNumber: number
   startedAt: Date
+  endsAt: Date | null
   endedAt: Date | null
   isActive: boolean
   winnerId: string | null
