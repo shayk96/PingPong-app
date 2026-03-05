@@ -44,7 +44,8 @@ const userSchema = new mongoose.Schema({
   wins: { type: Number, default: 0 },
   losses: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
-  lastPlayedAt: { type: Date, default: Date.now } // Track last activity
+  lastPlayedAt: { type: Date, default: Date.now },
+  seasonWins: [{ type: Number }] // Array of season numbers this player has won
 })
 
 const matchSchema = new mongoose.Schema({
@@ -58,7 +59,8 @@ const matchSchema = new mongoose.Schema({
   matchType: { type: Number, default: 11 },
   winnerEloDelta: { type: Number, required: true },
   loserEloDelta: { type: Number, required: true },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  seasonNumber: { type: Number, default: 1 }
 })
 
 // ELO History schema - tracks rating changes over time
@@ -69,9 +71,26 @@ const eloHistorySchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now }
 })
 
+const seasonSchema = new mongoose.Schema({
+  seasonNumber: { type: Number, required: true, unique: true },
+  startedAt: { type: Date, default: Date.now },
+  endedAt: { type: Date, default: null },
+  isActive: { type: Boolean, default: true },
+  winnerId: { type: String, default: null },
+  winnerName: { type: String, default: null },
+  finalStandings: [{
+    playerId: String,
+    displayName: String,
+    eloRating: Number,
+    wins: Number,
+    losses: Number
+  }]
+})
+
 const User = mongoose.model('User', userSchema)
 const Match = mongoose.model('Match', matchSchema)
 const EloHistory = mongoose.model('EloHistory', eloHistorySchema)
+const Season = mongoose.model('Season', seasonSchema)
 
 // Generate unique ID
 function generateId() {
@@ -342,6 +361,10 @@ app.post('/api/matches', async (req, res) => {
     const winnerDelta = delta
     const loserDelta = -delta
 
+    // Get current season number
+    const currentSeason = await Season.findOne({ isActive: true })
+    const seasonNumber = currentSeason?.seasonNumber || 1
+
     // Create match
     const newMatch = new Match({
       id: generateId(),
@@ -351,10 +374,11 @@ app.post('/api/matches', async (req, res) => {
       playerBScore,
       winnerId,
       loserId,
-      matchType: 11, // All games first to 11
+      matchType: 11,
       winnerEloDelta: winnerDelta,
       loserEloDelta: loserDelta,
-      createdAt: new Date()
+      createdAt: new Date(),
+      seasonNumber
     })
 
     await newMatch.save()
@@ -487,6 +511,132 @@ app.get('/api/elo-history', async (req, res) => {
     res.json(history)
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch ELO history' })
+  }
+})
+
+// ============ Season Routes ============
+
+// Get all seasons
+app.get('/api/seasons', async (req, res) => {
+  try {
+    const seasons = await Season.find().sort({ seasonNumber: -1 })
+    res.json(seasons)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch seasons' })
+  }
+})
+
+// Get current active season
+app.get('/api/seasons/current', async (req, res) => {
+  try {
+    const season = await Season.findOne({ isActive: true })
+    if (!season) {
+      return res.status(404).json({ error: 'No active season found' })
+    }
+    res.json(season)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch current season' })
+  }
+})
+
+// End current season and start a new one (admin password protected)
+app.post('/api/seasons/end', async (req, res) => {
+  const { password } = req.body || {}
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ error: 'Invalid password' })
+  }
+
+  try {
+    const currentSeason = await Season.findOne({ isActive: true })
+    if (!currentSeason) {
+      return res.status(400).json({ error: 'No active season to end' })
+    }
+
+    const players = await User.find()
+    const seasonMatches = await Match.find({ seasonNumber: currentSeason.seasonNumber })
+
+    // Build per-player season stats from matches in this season
+    const seasonStats = {}
+    for (const p of players) {
+      seasonStats[p.id] = { wins: 0, losses: 0 }
+    }
+    for (const m of seasonMatches) {
+      if (seasonStats[m.winnerId]) seasonStats[m.winnerId].wins++
+      if (seasonStats[m.loserId]) seasonStats[m.loserId].losses++
+    }
+
+    // Determine winner: highest ELO among established players (5+ season games)
+    const eligiblePlayers = players.filter(p => {
+      const s = seasonStats[p.id]
+      return s && (s.wins + s.losses) >= 5
+    })
+
+    let winner = null
+    if (eligiblePlayers.length > 0) {
+      winner = eligiblePlayers.sort((a, b) => b.eloRating - a.eloRating)[0]
+    }
+
+    // Save final standings snapshot
+    const finalStandings = players
+      .sort((a, b) => b.eloRating - a.eloRating)
+      .map(p => ({
+        playerId: p.id,
+        displayName: p.displayName,
+        eloRating: p.eloRating,
+        wins: seasonStats[p.id]?.wins || 0,
+        losses: seasonStats[p.id]?.losses || 0
+      }))
+
+    // End current season
+    currentSeason.isActive = false
+    currentSeason.endedAt = new Date()
+    currentSeason.winnerId = winner?.id || null
+    currentSeason.winnerName = winner?.displayName || null
+    currentSeason.finalStandings = finalStandings
+    await currentSeason.save()
+
+    // Award badge to winner
+    if (winner) {
+      await User.updateOne(
+        { id: winner.id },
+        { $addToSet: { seasonWins: currentSeason.seasonNumber } }
+      )
+    }
+
+    // Reset all ELO to 800, keep wins/losses/games (all-time stats persist)
+    await User.updateMany({}, { $set: { eloRating: 800 } })
+
+    // Create new season
+    const newSeasonNumber = currentSeason.seasonNumber + 1
+    const newSeason = new Season({
+      seasonNumber: newSeasonNumber,
+      startedAt: new Date(),
+      isActive: true
+    })
+    await newSeason.save()
+
+    // Add fresh ELO history entries for the new season start
+    const now = new Date()
+    const freshHistoryEntries = players.map(p => ({
+      playerId: p.id,
+      eloRating: 800,
+      matchId: null,
+      timestamp: now
+    }))
+    if (freshHistoryEntries.length > 0) {
+      await EloHistory.insertMany(freshHistoryEntries)
+    }
+
+    res.json({
+      success: true,
+      endedSeason: currentSeason.seasonNumber,
+      newSeason: newSeasonNumber,
+      winner: winner ? { id: winner.id, displayName: winner.displayName } : null
+    })
+  } catch (err) {
+    console.error('Error ending season:', err.message)
+    res.status(500).json({ error: 'Failed to end season' })
   }
 })
 
@@ -697,14 +847,12 @@ async function restoreEloBackup(backupId) {
 }
 
 /**
- * Completely recalculate all ELO ratings from scratch
- * - Resets all players to 800 ELO with 0 wins/losses
- * - Replays all matches in chronological order using current formula
- * - Updates match deltas and rebuilds ELO history
+ * Completely recalculate all ELO ratings from scratch.
+ * Season-aware: replays matches grouped by season, resetting ELO to 800 at each
+ * season boundary. All-time wins/losses accumulate across seasons.
  */
 async function recalculateAllElo() {
   try {
-    // Create backup before recalculating
     const backupId = await createEloBackup()
     if (backupId) {
       console.log(`💾 Backup created. To restore, use backupId: ${backupId}`)
@@ -712,23 +860,20 @@ async function recalculateAllElo() {
     
     console.log('🔄 Recalculating all ELO ratings from scratch...')
     
-    // Get all players and matches
     const players = await User.find()
-    const matches = await Match.find().sort({ createdAt: 1 }) // Oldest first
+    const allMatches = await Match.find().sort({ createdAt: 1 })
+    const seasons = await Season.find().sort({ seasonNumber: 1 })
     
-    if (matches.length === 0) {
+    if (allMatches.length === 0) {
       console.log('📊 No matches to recalculate')
       return
     }
     
-    // Clear existing ELO history
     await EloHistory.deleteMany({})
     
-    // Track each player's state
     const playerState = {}
     const historyEntries = []
     
-    // Reset all players to initial state
     for (const player of players) {
       playerState[player.id] = {
         eloRating: 800,
@@ -737,7 +882,6 @@ async function recalculateAllElo() {
         lastPlayedAt: player.createdAt || new Date()
       }
       
-      // Add initial ELO history entry
       historyEntries.push({
         playerId: player.id,
         eloRating: 800,
@@ -745,72 +889,81 @@ async function recalculateAllElo() {
         timestamp: player.createdAt || new Date('2024-01-01')
       })
     }
-    
-    // Replay all matches in chronological order
-    for (const match of matches) {
-      const winnerId = match.winnerId
-      const loserId = match.loserId
-      
-      // Skip if players don't exist
-      if (!playerState[winnerId] || !playerState[loserId]) continue
-      
-      const winner = playerState[winnerId]
-      const loser = playerState[loserId]
-      
-      // Get scores from match
-      const winnerScore = match.playerAId === winnerId ? match.playerAScore : match.playerBScore
-      const loserScore = match.playerAId === loserId ? match.playerAScore : match.playerBScore
-      
-      // Calculate games played at time of match
-      const winnerGamesPlayed = winner.wins + winner.losses
-      const loserGamesPlayed = loser.wins + loser.losses
-      
-      // Get K-factors - use average for symmetric calculation
-      const winnerK = getKFactor(winnerGamesPlayed)
-      const loserK = getKFactor(loserGamesPlayed)
-      const avgK = (winnerK + loserK) / 2
-      
-      // Get margin multiplier
-      const marginMult = getMarginMultiplier(winnerScore, loserScore)
-      
-      // Calculate ELO changes - SYMMETRIC
-      const expWinner = expectedScore(winner.eloRating, loser.eloRating)
-      const delta = Math.round(avgK * marginMult * (1 - expWinner))
-      
-      // Update player states
-      winner.eloRating += delta
-      winner.wins += 1
-      winner.lastPlayedAt = match.createdAt
-      
-      loser.eloRating -= delta
-      loser.losses += 1
-      loser.lastPlayedAt = match.createdAt
-      
-      // Update match with new deltas
-      await Match.updateOne(
-        { id: match.id },
-        { 
-          winnerEloDelta: delta,
-          loserEloDelta: -delta
+
+    // Group matches by season for proper ELO reset boundaries
+    const seasonNumbers = [...new Set(allMatches.map(m => m.seasonNumber || 1))].sort((a, b) => a - b)
+    let currentSeasonIdx = 0
+
+    for (const seasonNum of seasonNumbers) {
+      // At the start of each new season (after the first), reset ELO to 800
+      if (currentSeasonIdx > 0) {
+        const seasonObj = seasons.find(s => s.seasonNumber === seasonNum)
+        const resetTimestamp = seasonObj?.startedAt || new Date()
+        for (const pid of Object.keys(playerState)) {
+          playerState[pid].eloRating = 800
+          historyEntries.push({
+            playerId: pid,
+            eloRating: 800,
+            matchId: null,
+            timestamp: resetTimestamp
+          })
         }
-      )
+      }
+      currentSeasonIdx++
+
+      const seasonMatches = allMatches.filter(m => (m.seasonNumber || 1) === seasonNum)
       
-      // Add ELO history entries
-      historyEntries.push({
-        playerId: winnerId,
-        eloRating: winner.eloRating,
-        matchId: match.id,
-        timestamp: match.createdAt
-      })
-      historyEntries.push({
-        playerId: loserId,
-        eloRating: loser.eloRating,
-        matchId: match.id,
-        timestamp: match.createdAt
-      })
+      for (const match of seasonMatches) {
+        const winnerId = match.winnerId
+        const loserId = match.loserId
+        
+        if (!playerState[winnerId] || !playerState[loserId]) continue
+        
+        const winner = playerState[winnerId]
+        const loser = playerState[loserId]
+        
+        const winnerScore = match.playerAId === winnerId ? match.playerAScore : match.playerBScore
+        const loserScore = match.playerAId === loserId ? match.playerAScore : match.playerBScore
+        
+        const winnerGamesPlayed = winner.wins + winner.losses
+        const loserGamesPlayed = loser.wins + loser.losses
+        
+        const winnerK = getKFactor(winnerGamesPlayed)
+        const loserK = getKFactor(loserGamesPlayed)
+        const avgK = (winnerK + loserK) / 2
+        
+        const marginMult = getMarginMultiplier(winnerScore, loserScore)
+        const expWinner = expectedScore(winner.eloRating, loser.eloRating)
+        const delta = Math.round(avgK * marginMult * (1 - expWinner))
+        
+        winner.eloRating += delta
+        winner.wins += 1
+        winner.lastPlayedAt = match.createdAt
+        
+        loser.eloRating -= delta
+        loser.losses += 1
+        loser.lastPlayedAt = match.createdAt
+        
+        await Match.updateOne(
+          { id: match.id },
+          { winnerEloDelta: delta, loserEloDelta: -delta }
+        )
+        
+        historyEntries.push({
+          playerId: winnerId,
+          eloRating: winner.eloRating,
+          matchId: match.id,
+          timestamp: match.createdAt
+        })
+        historyEntries.push({
+          playerId: loserId,
+          eloRating: loser.eloRating,
+          matchId: match.id,
+          timestamp: match.createdAt
+        })
+      }
     }
     
-    // Update all players in database
     for (const playerId of Object.keys(playerState)) {
       const state = playerState[playerId]
       await User.updateOne(
@@ -824,12 +977,11 @@ async function recalculateAllElo() {
       )
     }
     
-    // Insert all ELO history entries
     if (historyEntries.length > 0) {
       await EloHistory.insertMany(historyEntries)
     }
     
-    console.log(`✅ Recalculated ELO for ${players.length} players from ${matches.length} matches`)
+    console.log(`✅ Recalculated ELO for ${players.length} players from ${allMatches.length} matches across ${seasonNumbers.length} season(s)`)
     console.log(`📈 Created ${historyEntries.length} ELO history entries`)
     
   } catch (err) {
@@ -848,6 +1000,20 @@ async function startServer() {
     
     // Migrate data from JSON files if needed
     await migrateFromJsonFiles()
+    
+    // Ensure there's always an active season
+    const activeSeason = await Season.findOne({ isActive: true })
+    if (!activeSeason) {
+      const lastSeason = await Season.findOne().sort({ seasonNumber: -1 })
+      const nextNumber = lastSeason ? lastSeason.seasonNumber + 1 : 1
+      await new Season({ seasonNumber: nextNumber, startedAt: new Date(), isActive: true }).save()
+      console.log(`🏆 Created Season ${nextNumber}`)
+
+      // Tag any untagged matches as season 1
+      if (!lastSeason) {
+        await Match.updateMany({ seasonNumber: { $exists: false } }, { $set: { seasonNumber: 1 } })
+      }
+    }
     
     // ONE-TIME: Recalculate all ELO ratings with current formula
     // This will reset everyone and replay all matches

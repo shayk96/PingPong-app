@@ -19,7 +19,8 @@ export function usePlayers() {
       const playerList = data.map((p: User & { createdAt: string; lastPlayedAt?: string }) => ({
         ...p,
         createdAt: new Date(p.createdAt),
-        lastPlayedAt: p.lastPlayedAt ? new Date(p.lastPlayedAt) : undefined
+        lastPlayedAt: p.lastPlayedAt ? new Date(p.lastPlayedAt) : undefined,
+        seasonWins: p.seasonWins || []
       })).sort((a: User, b: User) => b.eloRating - a.eloRating)
       setPlayers(playerList)
       setError(null)

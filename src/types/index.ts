@@ -11,7 +11,8 @@ export interface User {
   wins: number
   losses: number
   createdAt: Date
-  lastPlayedAt?: Date // Track when player last played a match
+  lastPlayedAt?: Date
+  seasonWins?: number[] // Season numbers this player has won
 }
 
 export interface UserStats {
@@ -42,11 +43,12 @@ export interface Match {
   playerBScore: number
   winnerId: string
   loserId: string
-  matchType: number // 11 (21 only for legacy matches)
+  matchType: number
   winnerEloDelta: number
   loserEloDelta: number
   createdAt: Date
   createdBy: string
+  seasonNumber?: number
 }
 
 // For creating a new match (without computed fields)
@@ -90,5 +92,24 @@ export interface EloResult {
   loserDelta: number
   newWinnerRating: number
   newLoserRating: number
+}
+
+// Season types
+export interface SeasonStanding {
+  playerId: string
+  displayName: string
+  eloRating: number
+  wins: number
+  losses: number
+}
+
+export interface Season {
+  seasonNumber: number
+  startedAt: Date
+  endedAt: Date | null
+  isActive: boolean
+  winnerId: string | null
+  winnerName: string | null
+  finalStandings: SeasonStanding[]
 }
 

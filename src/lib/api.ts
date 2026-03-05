@@ -108,6 +108,54 @@ export async function fetchEloHistory(playerIds?: string[]): Promise<EloHistoryE
   return res.json()
 }
 
+// ============ Seasons ============
+
+export interface SeasonResponse {
+  seasonNumber: number
+  startedAt: string
+  endedAt: string | null
+  isActive: boolean
+  winnerId: string | null
+  winnerName: string | null
+  finalStandings: {
+    playerId: string
+    displayName: string
+    eloRating: number
+    wins: number
+    losses: number
+  }[]
+}
+
+export async function fetchCurrentSeason(): Promise<SeasonResponse> {
+  const res = await fetch(`${API_URL}/seasons/current`)
+  if (!res.ok) throw new Error('Failed to fetch current season')
+  return res.json()
+}
+
+export async function fetchAllSeasons(): Promise<SeasonResponse[]> {
+  const res = await fetch(`${API_URL}/seasons`)
+  if (!res.ok) throw new Error('Failed to fetch seasons')
+  return res.json()
+}
+
+export async function endSeason(password: string): Promise<{
+  success: boolean
+  endedSeason: number
+  newSeason: number
+  winner: { id: string; displayName: string } | null
+}> {
+  const res = await fetch(`${API_URL}/seasons/end`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password })
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error || 'Failed to end season')
+  }
+  return res.json()
+}
+
 // ============ Health Check ============
 
 export async function checkHealth() {

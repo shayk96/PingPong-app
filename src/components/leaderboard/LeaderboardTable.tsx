@@ -40,10 +40,18 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
 
           {/* Player info */}
           <div className="flex-1 min-w-0">
-            <div className={`font-semibold truncate ${entry.isInactive ? 'text-gray-500' : entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
+            <div className={`font-semibold truncate flex items-center gap-1.5 ${entry.isInactive ? 'text-gray-500' : entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
               {entry.user.displayName}
+              {entry.user.seasonWins && entry.user.seasonWins.length > 0 && (
+                <span
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 text-[10px] font-bold flex-shrink-0"
+                  title={`Season ${entry.user.seasonWins.join(', ')} Champion`}
+                >
+                  🏆 {entry.user.seasonWins.length > 1 ? `×${entry.user.seasonWins.length}` : `S${entry.user.seasonWins[0]}`}
+                </span>
+              )}
               {entry.isInactive && (
-                <span className="ml-1.5 text-xs font-normal text-gray-500">(inactive)</span>
+                <span className="text-xs font-normal text-gray-500">(inactive)</span>
               )}
             </div>
             <div className="text-xs text-yellow-400">

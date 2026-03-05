@@ -253,6 +253,22 @@ export default function PlayerProfile() {
           </div>
         </div>
 
+        {/* Season Champion Badges */}
+        {player.seasonWins && player.seasonWins.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-background-lighter">
+            <div className="flex flex-wrap gap-2">
+              {player.seasonWins.map(s => (
+                <span
+                  key={s}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/25 text-yellow-400 text-xs font-semibold"
+                >
+                  🏆 Season {s} Champion
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Recent Form */}
         {recentForm.length > 0 && (
           <div className="mt-4 pt-4 border-t border-background-lighter">
