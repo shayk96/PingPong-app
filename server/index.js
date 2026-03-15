@@ -289,11 +289,11 @@ async function migrateFromJsonFiles() {
 
 // ============ API Routes ============
 
-// Auto-end season if the deadline has passed
-app.use('/api', async (req, res, next) => {
-  try { await checkAndEndSeason() } catch (e) { /* non-blocking */ }
-  next()
-})
+// PAUSED: Auto-end season if the deadline has passed
+// app.use('/api', async (req, res, next) => {
+//   try { await checkAndEndSeason() } catch (e) { /* non-blocking */ }
+//   next()
+// })
 
 // Get all players
 app.get('/api/players', async (req, res) => {

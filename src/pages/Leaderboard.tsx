@@ -18,7 +18,7 @@ export default function Leaderboard() {
   const { players, loading: playersLoading, addPlayer, deletePlayer, refresh: refreshPlayers } = usePlayers()
   const { matches, loading: matchesLoading, deleteMatch, undoMatch, refresh: refreshMatches } = useMatches()
   const { currentSeason, pastSeasons, loading: seasonLoading, refresh: refreshSeason } = useSeason()
-  const [showInactivePlayers, setShowInactivePlayers] = useState(false)
+  const [showInactivePlayers, setShowInactivePlayers] = useState(true) // default to showing all players
   const leaderboard = useLeaderboard(players, matches, showInactivePlayers)
   const recentMatches = useRecentMatchesWithPlayers(matches, players, 10)
   const inactiveCount = useMemo(() => players.filter(p => isPlayerInactive(p.lastPlayedAt)).length, [players])
@@ -354,8 +354,19 @@ export default function Leaderboard() {
         </div>
       </header>
 
-      {/* Season Banner */}
-      {currentSeason && (
+      {/* Season paused notice */}
+      <div className="mb-4 p-3 bg-background-light rounded-xl border border-background-lighter">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">⏸️</span>
+          <div>
+            <div className="text-white font-semibold text-sm">Season Paused</div>
+            <div className="text-xs text-gray-400">Seasons will resume after the war</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Season Banner — PAUSED: uncomment to re-enable */}
+      {/* currentSeason && (
         <div className="mb-4 p-3 bg-background-light rounded-xl border border-background-lighter">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -378,7 +389,6 @@ export default function Leaderboard() {
               </div>
             )}
           </div>
-          {/* Previous season winner announcement */}
           {pastSeasons.length > 0 && pastSeasons[0].winnerName && (
             <div className="mt-2 pt-2 border-t border-background-lighter flex items-center gap-2">
               <span className="text-yellow-400 text-xs">👑</span>
@@ -388,7 +398,7 @@ export default function Leaderboard() {
             </div>
           )}
         </div>
-      )}
+      ) */}
 
       {/* Undo Last Match Banner */}
       {undoableMatch && undoTimeLeft > 0 && (() => {
@@ -433,7 +443,8 @@ export default function Leaderboard() {
             entries={leaderboard} 
             onDeletePlayer={handleDeletePlayerClick}
           />
-          {inactiveCount > 0 && (
+          {/* PAUSED: inactive toggle hidden — all players shown by default */}
+          {/* inactiveCount > 0 && (
             <button
               type="button"
               onClick={() => setShowInactivePlayers(prev => !prev)}
@@ -444,7 +455,7 @@ export default function Leaderboard() {
                 : `Show inactive players (${inactiveCount})`
               }
             </button>
-          )}
+          ) */}
         </section>
       )}
 

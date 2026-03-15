@@ -28,9 +28,7 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
         <div
           key={entry.user.id}
           onClick={() => navigate(`/player/${entry.user.id}`)}
-          className={`flex items-center gap-2 p-3 rounded-xl border border-transparent hover:border-background-lighter transition-all duration-200 cursor-pointer active:scale-[0.99] ${
-            entry.isInactive ? 'bg-background-lighter/50 opacity-75' : 'bg-background-light'
-          }`}
+          className="flex items-center gap-2 p-3 rounded-xl border border-transparent hover:border-background-lighter transition-all duration-200 cursor-pointer active:scale-[0.99] bg-background-light"
           style={{ animationDelay: `${index * 50}ms` }}
         >
           {/* Rank */}
@@ -40,7 +38,7 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
 
           {/* Player info */}
           <div className="flex-1 min-w-0">
-            <div className={`font-semibold truncate flex items-center gap-1.5 ${entry.isInactive ? 'text-gray-500' : entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
+            <div className={`font-semibold truncate flex items-center gap-1.5 ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
               {entry.user.displayName}
               {entry.user.seasonWins && entry.user.seasonWins.length > 0 && (
                 <span
@@ -49,9 +47,6 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
                 >
                   🏆 {entry.user.seasonWins.length > 1 ? `×${entry.user.seasonWins.length}` : `S${entry.user.seasonWins[0]}`}
                 </span>
-              )}
-              {entry.isInactive && (
-                <span className="text-xs font-normal text-gray-500">(inactive)</span>
               )}
             </div>
             <div className="text-xs text-yellow-400">
@@ -97,14 +92,12 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
 }
 
 function RankBadge({ rank, isProvisional, isInactive }: { rank: number; isProvisional?: boolean; isInactive?: boolean }) {
-  if (isInactive) {
-    return (
-      <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-sm font-medium text-gray-500" title="Inactive">
-        -
-      </div>
-    )
-  }
-  // Provisional players get a muted badge
+  // PAUSED: inactive badge disabled — all players ranked normally
+  // if (isInactive) {
+  //   return (
+  //     <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-sm font-medium text-gray-500" title="Inactive">-</div>
+  //   )
+  // }
   if (isProvisional) {
     return (
       <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-sm font-medium text-gray-500">
