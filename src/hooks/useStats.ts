@@ -128,16 +128,17 @@ export function useLeaderboard(
       ? [...players]
       : players.filter(p => !isPlayerInactive(p.lastPlayedAt))
 
-    // Separate established and provisional (and when including inactive, inactive go at bottom)
-    const establishedPlayers = playersToRank.filter(p => (p.wins + p.losses) >= MIN_GAMES_FOR_RANKING && !isPlayerInactive(p.lastPlayedAt))
-    const provisionalPlayers = playersToRank.filter(p => (p.wins + p.losses) < MIN_GAMES_FOR_RANKING && !isPlayerInactive(p.lastPlayedAt))
-    const inactivePlayers = includeInactive ? playersToRank.filter(p => isPlayerInactive(p.lastPlayedAt)) : []
+    // PAUSED: bucket sorting disabled — all players sorted purely by ELO
+    // To restore: uncomment the bucket logic below and remove the simple sort
+    // const establishedPlayers = playersToRank.filter(p => (p.wins + p.losses) >= MIN_GAMES_FOR_RANKING && !isPlayerInactive(p.lastPlayedAt))
+    // const provisionalPlayers = playersToRank.filter(p => (p.wins + p.losses) < MIN_GAMES_FOR_RANKING && !isPlayerInactive(p.lastPlayedAt))
+    // const inactivePlayers = includeInactive ? playersToRank.filter(p => isPlayerInactive(p.lastPlayedAt)) : []
+    // establishedPlayers.sort((a, b) => b.eloRating - a.eloRating)
+    // provisionalPlayers.sort((a, b) => b.eloRating - a.eloRating)
+    // inactivePlayers.sort((a, b) => b.eloRating - a.eloRating)
+    // const sortedPlayers = [...establishedPlayers, ...provisionalPlayers, ...inactivePlayers]
 
-    establishedPlayers.sort((a, b) => b.eloRating - a.eloRating)
-    provisionalPlayers.sort((a, b) => b.eloRating - a.eloRating)
-    inactivePlayers.sort((a, b) => b.eloRating - a.eloRating)
-
-    const sortedPlayers = [...establishedPlayers, ...provisionalPlayers, ...inactivePlayers]
+    const sortedPlayers = [...playersToRank].sort((a, b) => b.eloRating - a.eloRating)
 
     const recentMatches = [...matches].sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
