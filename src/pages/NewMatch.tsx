@@ -31,6 +31,7 @@ export default function NewMatch() {
   const matchType = 11 as const // All games first to 11
   const [gameErrors, setGameErrors] = useState<(string | null)[]>([])
   const scoreInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const [focusTarget, setFocusTarget] = useState<string | null>(null)
 
   // Focus a score input when target changes
@@ -180,13 +181,24 @@ export default function NewMatch() {
     if (slot === 'A') {
       if (playerB?.id === player.id) setPlayerB(null)
       setPlayerA(player)
-      // Auto-focus first score when both players now selected
-      if (playerB && playerB.id !== player.id) setFocusTarget('0-A')
+      if (playerB && playerB.id !== player.id) {
+        setFocusTarget('0-A')
+      } else {
+        // Player A picked, need player B — focus search bar and select text
+        setTimeout(() => {
+          if (searchInputRef.current) {
+            searchInputRef.current.focus()
+            searchInputRef.current.select()
+          }
+        }, 50)
+      }
     } else {
       if (playerA?.id === player.id) setPlayerA(null)
       setPlayerB(player)
-      // Auto-focus first score when both players now selected
-      if (playerA && playerA.id !== player.id) setFocusTarget('0-A')
+      if (playerA && playerA.id !== player.id) {
+        // Both players selected — focus first score input
+        setFocusTarget('0-A')
+      }
     }
   }
 
@@ -247,6 +259,7 @@ export default function NewMatch() {
 
           {players.length > 4 && (
             <input
+              ref={searchInputRef}
               type="search"
               value={playerSearch}
               onChange={(e) => setPlayerSearch(e.target.value)}
