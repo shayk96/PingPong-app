@@ -40,6 +40,7 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
           <div className="flex-1 min-w-0">
             <div className={`font-semibold truncate flex items-center gap-1.5 ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
               {entry.user.displayName}
+              {/* PAUSED: season champion badge hidden
               {entry.user.seasonWins && entry.user.seasonWins.length > 0 && (
                 <span
                   className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 text-[10px] font-bold flex-shrink-0"
@@ -47,7 +48,7 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
                 >
                   🏆 {entry.user.seasonWins.length > 1 ? `×${entry.user.seasonWins.length}` : `S${entry.user.seasonWins[0]}`}
                 </span>
-              )}
+              )} */}
             </div>
             <div className="text-xs text-yellow-400">
               {getRatingTier(entry.user.eloRating)}

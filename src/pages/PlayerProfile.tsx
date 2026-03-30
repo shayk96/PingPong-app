@@ -253,7 +253,7 @@ export default function PlayerProfile() {
           </div>
         </div>
 
-        {/* Season Champion Badges */}
+        {/* PAUSED: season champion badges hidden
         {player.seasonWins && player.seasonWins.length > 0 && (
           <div className="mt-3 pt-3 border-t border-background-lighter">
             <div className="flex flex-wrap gap-2">
@@ -267,7 +267,7 @@ export default function PlayerProfile() {
               ))}
             </div>
           </div>
-        )}
+        )} */}
 
         {/* Recent Form */}
         {recentForm.length > 0 && (
