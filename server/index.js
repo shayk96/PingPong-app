@@ -1,6 +1,6 @@
 /**
  * Express server with MongoDB storage
- * Run with: node server/index.js
+ * Works both standalone (node server/index.js) and as a Vercel serverless function
  */
 
 import express from 'express'
@@ -11,7 +11,6 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { readFileSync, existsSync } from 'fs'
 
-// Load environment variables
 dotenv.config()
 
 const __filename = fileURLToPath(import.meta.url)
@@ -20,20 +19,33 @@ const __dirname = dirname(__filename)
 const app = express()
 const PORT = process.env.PORT || 3001
 
-// MongoDB connection string (from environment variable)
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pingpong'
-
-// Admin password for protected operations
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '207902602'
 
-// Middleware
+// Cached MongoDB connection for serverless cold starts
+let isConnected = false
+async function connectDB() {
+  if (isConnected) return
+  if (mongoose.connection.readyState === 1) {
+    isConnected = true
+    return
+  }
+  await mongoose.connect(MONGODB_URI)
+  isConnected = true
+}
+
 app.use(cors())
 app.use(express.json())
 
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(join(__dirname, '../dist')))
-}
+// Ensure DB is connected before handling any request (serverless-safe)
+app.use(async (req, res, next) => {
+  try {
+    await connectDB()
+    next()
+  } catch (err) {
+    res.status(500).json({ error: 'Database connection failed' })
+  }
+})
 
 // ============ MongoDB Schemas ============
 
@@ -830,8 +842,9 @@ app.post('/api/backups/:backupId/restore', async (req, res) => {
   }
 })
 
-// Catch-all route for SPA (production)
-if (process.env.NODE_ENV === 'production') {
+// SPA catch-all only when running standalone (not on Vercel)
+if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
+  app.use(express.static(join(__dirname, '../dist')))
   app.get('*', (req, res) => {
     res.sendFile(join(__dirname, '../dist/index.html'))
   })
@@ -1089,53 +1102,61 @@ async function recalculateAllElo() {
   }
 }
 
-// ============ Start Server ============
+// ============ Admin: Manual Recalculation Endpoint ============
 
-async function startServer() {
+app.post('/api/admin/recalculate', async (req, res) => {
+  const { password } = req.body || {}
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ error: 'Invalid password' })
+  }
   try {
-    // Connect to MongoDB
-    console.log('🔌 Connecting to MongoDB...')
-    await mongoose.connect(MONGODB_URI)
-    console.log('✅ Connected to MongoDB')
-    
-    // Migrate data from JSON files if needed
-    await migrateFromJsonFiles()
-    
-    // Ensure there's always an active season
-    const activeSeason = await Season.findOne({ isActive: true })
-    if (!activeSeason) {
-      const lastSeason = await Season.findOne().sort({ seasonNumber: -1 })
-      const nextNumber = lastSeason ? lastSeason.seasonNumber + 1 : 1
-      const endsAt = SEASON_END_DATES[nextNumber] || null
-      await new Season({ seasonNumber: nextNumber, startedAt: new Date(), endsAt, isActive: true }).save()
-      console.log(`🏆 Created Season ${nextNumber}`)
-
-      if (!lastSeason) {
-        await Match.updateMany({ seasonNumber: { $exists: false } }, { $set: { seasonNumber: 1 } })
-      }
-    } else if (!activeSeason.endsAt && SEASON_END_DATES[activeSeason.seasonNumber]) {
-      activeSeason.endsAt = SEASON_END_DATES[activeSeason.seasonNumber]
-      await activeSeason.save()
-      console.log(`📅 Set Season ${activeSeason.seasonNumber} end date to ${activeSeason.endsAt.toISOString().slice(0, 10)}`)
-    }
-    
-    // PAUSED: season auto-end disabled
-    // await checkAndEndSeason()
-    
-    // ONE-TIME: Recalculate all ELO ratings with current formula
-    // This will reset everyone and replay all matches
-    // Remove or comment out this line after it runs once
     await recalculateAllElo()
-    
-    // Start Express server
-    app.listen(PORT, () => {
-      console.log(`🏓 Ping Pong server running on port ${PORT}`)
-      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`)
-    })
+    const players = await User.find().sort({ eloRating: -1 })
+    res.json({ success: true, players: players.length })
   } catch (err) {
-    console.error('❌ Failed to start server:', err.message)
-    process.exit(1)
+    res.status(500).json({ error: 'Recalculation failed: ' + err.message })
+  }
+})
+
+// ============ Start Server (standalone only) ============
+
+async function ensureSeasonExists() {
+  const activeSeason = await Season.findOne({ isActive: true })
+  if (!activeSeason) {
+    const lastSeason = await Season.findOne().sort({ seasonNumber: -1 })
+    const nextNumber = lastSeason ? lastSeason.seasonNumber + 1 : 1
+    const endsAt = SEASON_END_DATES[nextNumber] || null
+    await new Season({ seasonNumber: nextNumber, startedAt: new Date(), endsAt, isActive: true }).save()
+    console.log(`🏆 Created Season ${nextNumber}`)
+    if (!lastSeason) {
+      await Match.updateMany({ seasonNumber: { $exists: false } }, { $set: { seasonNumber: 1 } })
+    }
+  } else if (!activeSeason.endsAt && SEASON_END_DATES[activeSeason.seasonNumber]) {
+    activeSeason.endsAt = SEASON_END_DATES[activeSeason.seasonNumber]
+    await activeSeason.save()
   }
 }
 
-startServer()
+// Only start the server when running directly (not imported by Vercel)
+const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url).includes(process.argv[1].replace(/\\/g, '/').split('/').pop())
+
+if (isDirectRun) {
+  ;(async () => {
+    try {
+      console.log('🔌 Connecting to MongoDB...')
+      await connectDB()
+      console.log('✅ Connected to MongoDB')
+      await migrateFromJsonFiles()
+      await ensureSeasonExists()
+
+      app.listen(PORT, () => {
+        console.log(`🏓 Ping Pong server running on port ${PORT}`)
+      })
+    } catch (err) {
+      console.error('❌ Failed to start server:', err.message)
+      process.exit(1)
+    }
+  })()
+}
+
+export default app
