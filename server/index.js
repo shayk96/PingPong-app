@@ -130,10 +130,7 @@ function isPlayerInactive(lastPlayedAt) {
 
 // Season end dates by season number
 const SEASON_END_DATES = {
-  1: new Date('2026-03-27T00:00:00'),
-  2: new Date('2026-06-18T00:00:00'),
-  3: new Date('2026-09-24T00:00:00'),
-  4: new Date('2026-12-24T00:00:00'),
+  1: new Date('2026-09-26T00:00:00'),
 }
 
 /**

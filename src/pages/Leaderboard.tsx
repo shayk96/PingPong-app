@@ -354,19 +354,7 @@ export default function Leaderboard() {
         </div>
       </header>
 
-      {/* Season paused notice */}
-      <div className="mb-4 p-3 bg-background-light rounded-xl border border-background-lighter">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">⏸️</span>
-          <div>
-            <div className="text-white font-semibold text-sm">Season Paused</div>
-            <div className="text-xs text-gray-400">Seasons will resume after the war</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Season Banner — PAUSED: uncomment to re-enable */}
-      {/* currentSeason && (
+      {currentSeason && (
         <div className="mb-4 p-3 bg-background-light rounded-xl border border-background-lighter">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -398,7 +386,7 @@ export default function Leaderboard() {
             </div>
           )}
         </div>
-      ) */}
+      )}
 
       {/* Undo Last Match Banner */}
       {undoableMatch && undoTimeLeft > 0 && (() => {
