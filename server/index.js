@@ -37,10 +37,11 @@ async function connectDB() {
 app.use(cors())
 app.use(express.json())
 
-// Ensure DB is connected before handling any request (serverless-safe)
+// Ensure DB is connected and season exists before handling any request (serverless-safe)
 app.use(async (req, res, next) => {
   try {
     await connectDB()
+    await ensureSeasonExists()
     next()
   } catch (err) {
     res.status(500).json({ error: 'Database connection failed' })
@@ -298,11 +299,10 @@ async function migrateFromJsonFiles() {
 
 // ============ API Routes ============
 
-// PAUSED: Auto-end season if the deadline has passed
-// app.use('/api', async (req, res, next) => {
-//   try { await checkAndEndSeason() } catch (e) { /* non-blocking */ }
-//   next()
-// })
+app.use('/api', async (req, res, next) => {
+  try { await checkAndEndSeason() } catch (e) { /* non-blocking */ }
+  next()
+})
 
 // Get all players
 app.get('/api/players', async (req, res) => {
