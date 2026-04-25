@@ -23,7 +23,7 @@ import { Line } from 'react-chartjs-2'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
 import { usePlayerStats, useLeaderboard } from '../hooks/useStats'
-import { fetchEloHistory, EloHistoryEntry } from '../lib/api'
+import { fetchEloHistory, EloHistoryEntry, renamePlayer } from '../lib/api'
 import { getRatingTier, formatEloDelta } from '../lib/elo'
 import { Button } from '../components/ui'
 
@@ -48,6 +48,11 @@ export default function PlayerProfile() {
   const { matches, loading: matchesLoading } = useMatches()
   const [eloHistory, setEloHistory] = useState<EloHistoryEntry[]>([])
   const [eloLoading, setEloLoading] = useState(true)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editError, setEditError] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const editInputRef = useRef<HTMLInputElement>(null)
   const chartRef = useRef<any>(null)
 
   const player = useMemo(() => players.find(p => p.id === id), [players, id])
@@ -121,6 +126,37 @@ export default function PlayerProfile() {
     const totalMargin = wins.reduce((sum, m) => sum + (m.playerScore - m.opponentScore), 0)
     return Math.round((totalMargin / wins.length) * 10) / 10
   }, [playerMatches])
+
+  const startEditing = () => {
+    if (!player) return
+    setEditName(player.displayName)
+    setEditError('')
+    setIsEditing(true)
+    setTimeout(() => editInputRef.current?.focus(), 50)
+  }
+
+  const cancelEditing = () => {
+    setIsEditing(false)
+    setEditError('')
+  }
+
+  const saveNewName = async () => {
+    if (!player || !editName.trim()) return
+    if (editName.trim() === player.displayName) {
+      setIsEditing(false)
+      return
+    }
+    setEditSaving(true)
+    setEditError('')
+    try {
+      await renamePlayer(player.id, editName.trim())
+      window.location.reload()
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to rename')
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   // ELO chart data
   const chartData = useMemo(() => {
@@ -236,9 +272,58 @@ export default function PlayerProfile() {
       <div className="bg-background-light rounded-2xl p-5 border border-background-lighter mb-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-display font-bold text-white">
-              {player.displayName}
-            </h1>
+            {isEditing ? (
+              <div>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={editInputRef}
+                    type="text"
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveNewName()
+                      if (e.key === 'Escape') cancelEditing()
+                    }}
+                    className="bg-background border border-background-lighter rounded-lg px-3 py-1.5 text-white text-lg font-bold w-40 focus:outline-none focus:border-accent"
+                    disabled={editSaving}
+                  />
+                  <button
+                    onClick={saveNewName}
+                    disabled={editSaving}
+                    className="p-1.5 rounded-lg bg-success/20 text-success hover:bg-success/30 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={cancelEditing}
+                    disabled={editSaving}
+                    className="p-1.5 rounded-lg bg-error/20 text-error hover:bg-error/30 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                {editError && <div className="text-error text-xs mt-1">{editError}</div>}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-display font-bold text-white">
+                  {player.displayName}
+                </h1>
+                <button
+                  onClick={startEditing}
+                  className="p-1 rounded-lg text-gray-500 hover:text-white hover:bg-background-lighter transition-colors"
+                  title="Edit name"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              </div>
+            )}
             <div className="text-yellow-400 text-sm mt-0.5">
               {getRatingTier(player.eloRating)}
             </div>

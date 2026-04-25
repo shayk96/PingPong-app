@@ -358,6 +358,37 @@ app.post('/api/players', async (req, res) => {
   }
 })
 
+// Rename a player
+app.patch('/api/players/:id/rename', async (req, res) => {
+  const { id } = req.params
+  const { displayName } = req.body
+
+  if (!displayName || !displayName.trim()) {
+    return res.status(400).json({ error: 'Player name is required' })
+  }
+
+  try {
+    const player = await User.findOne({ id })
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' })
+    }
+
+    const existing = await User.findOne({
+      displayName: { $regex: new RegExp(`^${displayName.trim()}$`, 'i') },
+      id: { $ne: id }
+    })
+    if (existing) {
+      return res.status(400).json({ error: 'A player with this name already exists' })
+    }
+
+    player.displayName = displayName.trim()
+    await player.save()
+    res.json(player)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to rename player' })
+  }
+})
+
 // Delete a player (password protected)
 app.delete('/api/players/:id', async (req, res) => {
   const { id } = req.params

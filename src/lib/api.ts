@@ -27,6 +27,19 @@ export async function createPlayer(displayName: string) {
   return res.json()
 }
 
+export async function renamePlayer(playerId: string, displayName: string) {
+  const res = await fetch(`${API_URL}/players/${playerId}/rename`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ displayName })
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error || 'Failed to rename player')
+  }
+  return res.json()
+}
+
 export async function deletePlayer(playerId: string) {
   const res = await fetch(`${API_URL}/players/${playerId}`, {
     method: 'DELETE',
