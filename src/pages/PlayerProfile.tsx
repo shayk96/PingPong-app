@@ -158,7 +158,7 @@ export default function PlayerProfile() {
     }
   }
 
-  // ELO chart data
+  // ELO chart data — x-axis is cumulative game number, grouped by day (last game per day)
   const chartData = useMemo(() => {
     if (eloHistory.length === 0) return { datasets: [] }
 
@@ -166,15 +166,16 @@ export default function PlayerProfile() {
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     )
 
-    const data = sorted.map(entry => ({
-      x: new Date(entry.timestamp),
-      y: entry.eloRating,
-    }))
+    const dayGroups = new Map<string, { gameNumber: number; eloRating: number }>()
+    sorted.forEach((entry, index) => {
+      const dayKey = new Date(entry.timestamp).toDateString()
+      dayGroups.set(dayKey, { gameNumber: index + 1, eloRating: entry.eloRating })
+    })
 
-    // Add current ELO as final point
-    if (player) {
-      data.push({ x: new Date(), y: player.eloRating })
-    }
+    const data = Array.from(dayGroups.values()).map(p => ({
+      x: p.gameNumber,
+      y: p.eloRating,
+    }))
 
     return {
       datasets: [{
@@ -188,7 +189,7 @@ export default function PlayerProfile() {
         fill: true,
       }]
     }
-  }, [eloHistory, player])
+  }, [eloHistory])
 
   const chartOptions = {
     responsive: true,
@@ -201,6 +202,9 @@ export default function PlayerProfile() {
         bodyColor: '#e5e5e5',
         borderColor: '#444',
         borderWidth: 1,
+        callbacks: {
+          title: (items: any[]) => `Game ${items[0]?.parsed?.x ?? ''}`,
+        },
       },
       zoom: {
         pan: { enabled: true, mode: 'xy' as const },
@@ -213,14 +217,20 @@ export default function PlayerProfile() {
     },
     scales: {
       x: {
-        type: 'time' as const,
-        time: {
-          unit: 'day' as const,
-          displayFormats: { day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' },
-          tooltipFormat: 'MMM d, yyyy',
+        type: 'linear' as const,
+        ticks: {
+          color: '#9ca3af',
+          maxRotation: 45,
+          callback: function(value: number | string) {
+            return Number.isInteger(Number(value)) ? value : '';
+          },
         },
-        ticks: { color: '#9ca3af', maxRotation: 45 },
         grid: { color: 'rgba(75, 75, 75, 0.3)' },
+        title: {
+          display: true,
+          text: 'Games',
+          color: '#9ca3af',
+        },
       },
       y: {
         ticks: { color: '#9ca3af' },

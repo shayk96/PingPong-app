@@ -134,25 +134,21 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     })
 
-    // Create datasets for each player
+    // Create datasets — x-axis is cumulative game number, grouped by day (last game per day)
     const datasets = selectedPlayerIds.map((playerId, index) => {
       const history = playerHistories[playerId] || []
       const colorIndex = index % PLAYER_COLORS.length
 
-      // Create data points with {x: timestamp, y: eloRating}
-      const data = history.map(entry => ({
-        x: new Date(entry.timestamp),
-        y: entry.eloRating
-      }))
+      const dayGroups = new Map<string, { gameNumber: number; eloRating: number }>()
+      history.forEach((entry, i) => {
+        const dayKey = new Date(entry.timestamp).toDateString()
+        dayGroups.set(dayKey, { gameNumber: i + 1, eloRating: entry.eloRating })
+      })
 
-      // Add current ELO as the final point with current date
-      const currentElo = getCurrentElo(playerId)
-      if (currentElo !== null) {
-        data.push({
-          x: new Date(),
-          y: currentElo
-        })
-      }
+      const data = Array.from(dayGroups.values()).map(p => ({
+        x: p.gameNumber,
+        y: p.eloRating,
+      }))
 
       return {
         label: getPlayerName(playerId),
@@ -186,6 +182,9 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
         bodyColor: '#e5e5e5',
         borderColor: '#444',
         borderWidth: 1,
+        callbacks: {
+          title: (items: any[]) => `Game ${items[0]?.parsed?.x ?? ''}`,
+        },
       },
       zoom: {
         pan: {
@@ -205,25 +204,19 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
     },
     scales: {
       x: {
-        type: 'time' as const,
-        time: {
-          unit: 'day',
-          displayFormats: {
-            day: 'MMM d',
-            week: 'MMM d',
-            month: 'MMM yyyy'
-          },
-          tooltipFormat: 'MMM d, yyyy h:mm a'
-        },
+        type: 'linear' as const,
         ticks: {
           color: '#9ca3af',
           maxRotation: 45,
-          minRotation: 0
+          minRotation: 0,
+          callback: function(value: number | string) {
+            return Number.isInteger(Number(value)) ? value : '';
+          },
         },
         grid: { color: 'rgba(75, 75, 75, 0.3)' },
         title: {
           display: true,
-          text: 'Date',
+          text: 'Games',
           color: '#9ca3af'
         }
       },
