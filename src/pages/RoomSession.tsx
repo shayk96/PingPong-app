@@ -387,6 +387,55 @@ export default function RoomSession() {
             </button>
           </div>
 
+          {/* Live Standings */}
+          {completedCount > 0 && (
+            <div className="bg-background-light rounded-xl p-3 border border-background-lighter">
+              <div className="grid grid-cols-[1.2rem_1fr_2.5rem_3.5rem] gap-1 text-xs text-gray-500 font-medium mb-1.5 px-1">
+                <span>#</span>
+                <span>Player</span>
+                <span className="text-center">W-L</span>
+                <span className="text-right">Margin</span>
+              </div>
+              {roomPlayers
+                .map(p => {
+                  const wins = matches.filter(m => m.status === 'done' && m.result?.winnerId === p.id).length
+                  const losses = matches.filter(m => m.status === 'done' && m.result?.loserId === p.id).length
+                  const marginPoints = matches
+                    .filter(m => m.status === 'done' && (m.playerA.id === p.id || m.playerB.id === p.id))
+                    .reduce((sum, m) => {
+                      if (!m.result) return sum
+                      const isA = m.playerA.id === p.id
+                      const myScore = isA ? m.result.scoreA : m.result.scoreB
+                      const oppScore = isA ? m.result.scoreB : m.result.scoreA
+                      return sum + (myScore - oppScore)
+                    }, 0)
+                  const gamesPlayed = wins + losses
+                  const avgMargin = gamesPlayed > 0 ? Math.round((marginPoints / gamesPlayed) * 10) / 10 : 0
+                  return { player: p, wins, losses, avgMargin }
+                })
+                .sort((a, b) => b.wins - a.wins || b.avgMargin - a.avgMargin)
+                .map(({ player, wins, losses, avgMargin }, i) => (
+                  <div
+                    key={player.id}
+                    className={`grid grid-cols-[1.2rem_1fr_2.5rem_3.5rem] gap-1 items-center px-1 py-1 rounded-lg text-xs ${
+                      i === 0 && wins > 0 ? 'bg-accent/10' : ''
+                    }`}
+                  >
+                    <span className={`font-bold ${i === 0 && wins > 0 ? 'text-accent' : 'text-gray-500'}`}>{i + 1}</span>
+                    <span className="text-white font-medium truncate">{player.displayName}</span>
+                    <span className="text-center">
+                      <span className="text-success">{wins}</span>
+                      <span className="text-gray-600">-</span>
+                      <span className="text-error">{losses}</span>
+                    </span>
+                    <span className={`text-right font-medium ${avgMargin > 0 ? 'text-success' : avgMargin < 0 ? 'text-error' : 'text-gray-500'}`}>
+                      {avgMargin > 0 ? '+' : ''}{avgMargin}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+
           {/* Current Match Card */}
           <div className="bg-background-light rounded-2xl p-5 border-2 border-accent/40">
             <div className="text-xs text-accent font-semibold text-center mb-3 uppercase tracking-wider">Now Playing</div>

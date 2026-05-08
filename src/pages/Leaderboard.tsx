@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
 import { useSeason } from '../hooks/useSeason'
@@ -52,8 +52,16 @@ export default function Leaderboard() {
   const [h2hPlayerB, setH2hPlayerB] = useState<User | null>(null)
   const [h2hPlayerSearch, setH2hPlayerSearch] = useState('')
 
-  // Lucky leaderboard modal
+  // Lucky leaderboard modal (auto-open via ?lucky=1 search param)
+  const [searchParams, setSearchParams] = useSearchParams()
   const [showLuckyModal, setShowLuckyModal] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('lucky') === '1') {
+      setShowLuckyModal(true)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   // Undo state
   const [undoing, setUndoing] = useState(false)
@@ -530,15 +538,6 @@ export default function Leaderboard() {
           </Button>
         </div>
       )}
-
-      {/* Lucky Points floating button */}
-      <button
-        onClick={() => setShowLuckyModal(true)}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 w-14 h-14 rounded-full bg-yellow-500 flex items-center justify-center shadow-lg shadow-yellow-500/40 hover:scale-105 active:scale-95 transition-transform z-50"
-        title="Lucky Points Leaderboard"
-      >
-        <span className="text-white text-2xl leading-none">&#9733;</span>
-      </button>
 
       {/* Add Player Modal */}
       <Modal
