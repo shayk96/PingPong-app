@@ -134,19 +134,20 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     })
 
-    // Create datasets — x-axis is cumulative game number, grouped by day (last game per day)
+    // Create datasets — grouped by day (last game per day), x-axis is date
     const datasets = selectedPlayerIds.map((playerId, index) => {
       const history = playerHistories[playerId] || []
       const colorIndex = index % PLAYER_COLORS.length
 
-      const dayGroups = new Map<string, { gameNumber: number; eloRating: number }>()
-      history.forEach((entry, i) => {
-        const dayKey = new Date(entry.timestamp).toDateString()
-        dayGroups.set(dayKey, { gameNumber: i + 1, eloRating: entry.eloRating })
+      const dayGroups = new Map<string, { date: Date; eloRating: number }>()
+      history.forEach((entry) => {
+        const d = new Date(entry.timestamp)
+        const dayKey = d.toDateString()
+        dayGroups.set(dayKey, { date: d, eloRating: entry.eloRating })
       })
 
       const data = Array.from(dayGroups.values()).map(p => ({
-        x: p.gameNumber,
+        x: p.date,
         y: p.eloRating,
       }))
 
@@ -182,9 +183,6 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
         bodyColor: '#e5e5e5',
         borderColor: '#444',
         borderWidth: 1,
-        callbacks: {
-          title: (items: any[]) => `Game ${items[0]?.parsed?.x ?? ''}`,
-        },
       },
       zoom: {
         pan: {
@@ -204,19 +202,25 @@ export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) 
     },
     scales: {
       x: {
-        type: 'linear' as const,
+        type: 'time' as const,
+        time: {
+          unit: 'day',
+          displayFormats: {
+            day: 'MMM d',
+            week: 'MMM d',
+            month: 'MMM yyyy'
+          },
+          tooltipFormat: 'MMM d, yyyy h:mm a'
+        },
         ticks: {
           color: '#9ca3af',
           maxRotation: 45,
-          minRotation: 0,
-          callback: function(value: number | string) {
-            return Number.isInteger(Number(value)) ? value : '';
-          },
+          minRotation: 0
         },
         grid: { color: 'rgba(75, 75, 75, 0.3)' },
         title: {
           display: true,
-          text: 'Games',
+          text: 'Date',
           color: '#9ca3af'
         }
       },

@@ -4,6 +4,7 @@ import Leaderboard from './pages/Leaderboard'
 import NewMatch from './pages/NewMatch'
 import PlayerProfile from './pages/PlayerProfile'
 import AllMatches from './pages/AllMatches'
+import RoomSession from './pages/RoomSession'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="new-match" element={<NewMatch />} />
         <Route path="player/:id" element={<PlayerProfile />} />
         <Route path="matches" element={<AllMatches />} />
+        <Route path="room" element={<RoomSession />} />
       </Route>
       
       {/* Catch all */}

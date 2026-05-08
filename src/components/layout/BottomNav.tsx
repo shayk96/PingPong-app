@@ -9,7 +9,7 @@ export function BottomNav() {
   const location = useLocation()
 
   // Hide floating buttons on the new-match page and all-matches page
-  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches')
+  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches') || location.pathname.startsWith('/room')
 
   return (
     <>

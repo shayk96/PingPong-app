@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
 import { useSeason } from '../hooks/useSeason'
@@ -15,6 +16,7 @@ import { Modal, Button, Input, ToastContainer, useToast } from '../components/ui
 import type { User } from '../types'
 
 export default function Leaderboard() {
+  const navigate = useNavigate()
   const { players, loading: playersLoading, addPlayer, deletePlayer, refresh: refreshPlayers } = usePlayers()
   const { matches, loading: matchesLoading, deleteMatch, undoMatch, refresh: refreshMatches } = useMatches()
   const { currentSeason, pastSeasons, loading: seasonLoading, refresh: refreshSeason } = useSeason()
@@ -342,6 +344,14 @@ export default function Leaderboard() {
               title="Refresh data"
             >
               ↻
+            </Button>
+            <Button
+              onClick={() => navigate('/room')}
+              variant="secondary"
+              size="sm"
+              title="Room Session"
+            >
+              Room
             </Button>
             <Button
               onClick={() => setShowAddPlayer(true)}
