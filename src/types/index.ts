@@ -49,6 +49,8 @@ export interface Match {
   createdAt: Date
   createdBy: string
   seasonNumber?: number
+  playerALuckyPoints: number
+  playerBLuckyPoints: number
 }
 
 // For creating a new match (without computed fields)
@@ -58,6 +60,8 @@ export interface NewMatchInput {
   playerAScore: number
   playerBScore: number
   matchType: MatchType
+  playerALuckyPoints?: number
+  playerBLuckyPoints?: number
 }
 
 // Leaderboard entry with computed rank

@@ -73,7 +73,9 @@ const matchSchema = new mongoose.Schema({
   winnerEloDelta: { type: Number, required: true },
   loserEloDelta: { type: Number, required: true },
   createdAt: { type: Date, default: Date.now },
-  seasonNumber: { type: Number, default: 1 }
+  seasonNumber: { type: Number, default: 1 },
+  playerALuckyPoints: { type: Number, default: 0 },
+  playerBLuckyPoints: { type: Number, default: 0 }
 })
 
 // ELO History schema - tracks rating changes over time
@@ -460,7 +462,7 @@ app.get('/api/matches', async (req, res) => {
 
 // Create a new match
 app.post('/api/matches', async (req, res) => {
-  const { playerAId, playerBId, playerAScore, playerBScore, matchType } = req.body
+  const { playerAId, playerBId, playerAScore, playerBScore, matchType, playerALuckyPoints, playerBLuckyPoints } = req.body
 
   if (!playerAId || !playerBId || playerAScore === undefined || playerBScore === undefined) {
     return res.status(400).json({ error: 'Missing required fields' })
@@ -468,6 +470,18 @@ app.post('/api/matches', async (req, res) => {
 
   if (playerAId === playerBId) {
     return res.status(400).json({ error: 'Cannot play against yourself' })
+  }
+
+  const luckyA = parseInt(playerALuckyPoints) || 0
+  const luckyB = parseInt(playerBLuckyPoints) || 0
+  if (luckyA < 0 || luckyB < 0) {
+    return res.status(400).json({ error: 'Lucky points cannot be negative' })
+  }
+  if (luckyA > playerAScore) {
+    return res.status(400).json({ error: 'Player A lucky points cannot exceed their score' })
+  }
+  if (luckyB > playerBScore) {
+    return res.status(400).json({ error: 'Player B lucky points cannot exceed their score' })
   }
 
   try {
@@ -522,7 +536,9 @@ app.post('/api/matches', async (req, res) => {
       winnerEloDelta: winnerDelta,
       loserEloDelta: loserDelta,
       createdAt: new Date(),
-      seasonNumber
+      seasonNumber,
+      playerALuckyPoints: luckyA,
+      playerBLuckyPoints: luckyB
     })
 
     await newMatch.save()

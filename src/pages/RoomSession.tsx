@@ -40,6 +40,8 @@ export default function RoomSession() {
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
   const [scoreA, setScoreA] = useState('')
   const [scoreB, setScoreB] = useState('')
+  const [luckyA, setLuckyA] = useState('')
+  const [luckyB, setLuckyB] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [roundNumber, setRoundNumber] = useState(1)
   const scoreARef = useRef<HTMLInputElement>(null)
@@ -99,6 +101,8 @@ export default function RoomSession() {
     setCurrentMatchIndex(0)
     setScoreA('')
     setScoreB('')
+    setLuckyA('')
+    setLuckyB('')
     setPhase('playing')
 
     // Set first match to playing
@@ -129,6 +133,8 @@ export default function RoomSession() {
       setMatches([...updatedMatches])
       setScoreA('')
       setScoreB('')
+      setLuckyA('')
+      setLuckyB('')
     }
   }, [])
 
@@ -138,6 +144,17 @@ export default function RoomSession() {
 
     const pAScore = parseInt(scoreA) || 0
     const pBScore = parseInt(scoreB) || 0
+    const pALucky = parseInt(luckyA) || 0
+    const pBLucky = parseInt(luckyB) || 0
+
+    if (pALucky > pAScore) {
+      showToast(`Lucky points can't exceed score (${pAScore})`, 'error')
+      return
+    }
+    if (pBLucky > pBScore) {
+      showToast(`Lucky points can't exceed score (${pBScore})`, 'error')
+      return
+    }
 
     const input: NewMatchInput = {
       playerAId: match.playerA.id,
@@ -145,6 +162,8 @@ export default function RoomSession() {
       playerAScore: pAScore,
       playerBScore: pBScore,
       matchType: 11,
+      playerALuckyPoints: pALucky,
+      playerBLuckyPoints: pBLucky,
     }
 
     const validation = validateMatch(input)
@@ -216,6 +235,8 @@ export default function RoomSession() {
     setCurrentMatchIndex(0)
     setScoreA('')
     setScoreB('')
+    setLuckyA('')
+    setLuckyB('')
     setOddMatchAdded(false)
     setRoundNumber(prev => prev + 1)
 
@@ -409,6 +430,31 @@ export default function RoomSession() {
                 }}
                 className="w-full bg-background border border-background-lighter rounded-xl px-3 py-3 text-white text-center text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-accent"
                 placeholder="0"
+              />
+            </div>
+
+            {/* Lucky points inputs */}
+            <div className="mt-2 grid gap-3 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
+              <input
+                type="number"
+                min="0"
+                max="30"
+                value={luckyA}
+                onChange={e => setLuckyA(e.target.value)}
+                className="w-full bg-background border border-background-lighter rounded-lg px-2 py-1.5 text-yellow-400 text-center text-sm font-medium focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                placeholder="0"
+                title="Lucky points"
+              />
+              <span className="text-yellow-500 text-xs">&#9733;</span>
+              <input
+                type="number"
+                min="0"
+                max="30"
+                value={luckyB}
+                onChange={e => setLuckyB(e.target.value)}
+                className="w-full bg-background border border-background-lighter rounded-lg px-2 py-1.5 text-yellow-400 text-center text-sm font-medium focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                placeholder="0"
+                title="Lucky points"
               />
             </div>
 

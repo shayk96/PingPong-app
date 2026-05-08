@@ -52,6 +52,9 @@ export default function Leaderboard() {
   const [h2hPlayerB, setH2hPlayerB] = useState<User | null>(null)
   const [h2hPlayerSearch, setH2hPlayerSearch] = useState('')
 
+  // Lucky leaderboard modal
+  const [showLuckyModal, setShowLuckyModal] = useState(false)
+
   // Undo state
   const [undoing, setUndoing] = useState(false)
   const [undoTimeLeft, setUndoTimeLeft] = useState(0)
@@ -148,6 +151,36 @@ export default function Leaderboard() {
     const oldest = seasonMatches.reduce((a, b) => a.createdAt.getTime() < b.createdAt.getTime() ? a : b)
     return oldest.createdAt
   }, [matches, currentSeason])
+
+  // Lucky points leaderboard data
+  const luckyLeaderboard = useMemo(() => {
+    const playerLucky: Record<string, { name: string; total: number; games: number }> = {}
+    for (const m of matches) {
+      const aLucky = (m as any).playerALuckyPoints || 0
+      const bLucky = (m as any).playerBLuckyPoints || 0
+      if (!playerLucky[m.playerAId]) {
+        const p = players.find(pl => pl.id === m.playerAId)
+        playerLucky[m.playerAId] = { name: p?.displayName || 'Unknown', total: 0, games: 0 }
+      }
+      playerLucky[m.playerAId].total += aLucky
+      playerLucky[m.playerAId].games += 1
+      if (!playerLucky[m.playerBId]) {
+        const p = players.find(pl => pl.id === m.playerBId)
+        playerLucky[m.playerBId] = { name: p?.displayName || 'Unknown', total: 0, games: 0 }
+      }
+      playerLucky[m.playerBId].total += bLucky
+      playerLucky[m.playerBId].games += 1
+    }
+    return Object.entries(playerLucky)
+      .map(([id, data]) => ({
+        id,
+        name: data.name,
+        totalLucky: data.total,
+        games: data.games,
+        avgLucky: data.games > 0 ? Math.round((data.total / data.games) * 10) / 10 : 0,
+      }))
+      .sort((a, b) => b.avgLucky - a.avgLucky)
+  }, [matches, players])
 
   const loading = playersLoading || matchesLoading || seasonLoading
 
@@ -497,6 +530,15 @@ export default function Leaderboard() {
         </div>
       )}
 
+      {/* Lucky Points floating button */}
+      <button
+        onClick={() => setShowLuckyModal(true)}
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 w-14 h-14 rounded-full bg-yellow-500 flex items-center justify-center shadow-lg shadow-yellow-500/40 hover:scale-105 active:scale-95 transition-transform z-50"
+        title="Lucky Points Leaderboard"
+      >
+        <span className="text-white text-2xl leading-none">&#9733;</span>
+      </button>
+
       {/* Add Player Modal */}
       <Modal
         isOpen={showAddPlayer}
@@ -733,6 +775,49 @@ export default function Leaderboard() {
           <Button
             variant="secondary"
             onClick={() => setShowH2HModal(false)}
+            className="w-full"
+          >
+            Close
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Lucky Points Leaderboard Modal */}
+      <Modal
+        isOpen={showLuckyModal}
+        onClose={() => setShowLuckyModal(false)}
+        title="Lucky Points Leaderboard"
+        maxWidth="md"
+      >
+        <div className="space-y-3">
+          {luckyLeaderboard.length > 0 ? (
+            <div className="space-y-1.5">
+              {luckyLeaderboard.map((entry, i) => (
+                <div
+                  key={entry.id}
+                  className="bg-background rounded-xl px-4 py-3 border border-background-lighter flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-gray-500 w-6 text-right">
+                      {i + 1}.
+                    </span>
+                    <span className="text-sm font-medium text-white">{entry.name}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-yellow-400 font-bold">{entry.avgLucky}/game</span>
+                    <span className="text-gray-500">{entry.totalLucky} total</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-gray-400 text-sm">
+              No match data yet
+            </div>
+          )}
+          <Button
+            variant="secondary"
+            onClick={() => setShowLuckyModal(false)}
             className="w-full"
           >
             Close

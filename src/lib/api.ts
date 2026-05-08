@@ -65,6 +65,8 @@ export async function createMatch(data: {
   playerAScore: number
   playerBScore: number
   matchType: number
+  playerALuckyPoints?: number
+  playerBLuckyPoints?: number
 }) {
   const res = await fetch(`${API_URL}/matches`, {
     method: 'POST',

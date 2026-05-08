@@ -15,6 +15,8 @@ import type { NewMatchInput, User } from '../types'
 interface GameEntry {
   playerAScore: string
   playerBScore: string
+  playerALucky: string
+  playerBLucky: string
 }
 
 export default function NewMatch() {
@@ -27,7 +29,7 @@ export default function NewMatch() {
 
   const [playerA, setPlayerA] = useState<User | null>(null)
   const [playerB, setPlayerB] = useState<User | null>(null)
-  const [games, setGames] = useState<GameEntry[]>([{ playerAScore: '', playerBScore: '' }])
+  const [games, setGames] = useState<GameEntry[]>([{ playerAScore: '', playerBScore: '', playerALucky: '', playerBLucky: '' }])
   const matchType = 11 as const // All games first to 11
   const [gameErrors, setGameErrors] = useState<(string | null)[]>([])
   const scoreInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
@@ -82,15 +84,14 @@ export default function NewMatch() {
     }
   }, [playerA, playerB, matches])
 
-  const updateGame = (index: number, field: 'playerAScore' | 'playerBScore', value: string) => {
+  const updateGame = (index: number, field: keyof GameEntry, value: string) => {
     setGames(prev => prev.map((g, i) => i === index ? { ...g, [field]: value } : g))
-    // Clear error for this game when user edits
     setGameErrors(prev => prev.map((e, i) => i === index ? null : e))
   }
 
   const addGame = () => {
     const newIndex = games.length
-    setGames(prev => [...prev, { playerAScore: '', playerBScore: '' }])
+    setGames(prev => [...prev, { playerAScore: '', playerBScore: '', playerALucky: '', playerBLucky: '' }])
     setGameErrors(prev => [...prev, null])
     setFocusTarget(`${newIndex}-A`)
   }
@@ -115,16 +116,29 @@ export default function NewMatch() {
     let hasError = false
 
     for (const game of games) {
+      const pAScore = parseInt(game.playerAScore) || 0
+      const pBScore = parseInt(game.playerBScore) || 0
+      const pALucky = parseInt(game.playerALucky) || 0
+      const pBLucky = parseInt(game.playerBLucky) || 0
+
       const input: NewMatchInput = {
         playerAId: playerA.id,
         playerBId: playerB.id,
-        playerAScore: parseInt(game.playerAScore) || 0,
-        playerBScore: parseInt(game.playerBScore) || 0,
-        matchType
+        playerAScore: pAScore,
+        playerBScore: pBScore,
+        matchType,
+        playerALuckyPoints: pALucky,
+        playerBLuckyPoints: pBLucky,
       }
       const validation = validateMatch(input)
       if (!validation.isValid) {
         errors.push(validation.error || 'Invalid score')
+        hasError = true
+      } else if (pALucky > pAScore) {
+        errors.push(`Lucky points can't exceed score (${pAScore})`)
+        hasError = true
+      } else if (pBLucky > pBScore) {
+        errors.push(`Lucky points can't exceed score (${pBScore})`)
         hasError = true
       } else {
         errors.push(null)
@@ -435,6 +449,31 @@ export default function NewMatch() {
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                       </svg>
                     </button>
+                  </div>
+                  {/* Lucky points row */}
+                  <div className="grid gap-2 items-center mt-1" style={{ gridTemplateColumns: '1fr auto 1fr auto' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="30"
+                      value={game.playerALucky}
+                      onChange={(e) => updateGame(index, 'playerALucky', e.target.value)}
+                      className="w-full bg-background border border-background-lighter rounded-lg px-2 py-1.5 text-yellow-400 text-center text-sm font-medium focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                      placeholder="0"
+                      title="Lucky points"
+                    />
+                    <span className="text-yellow-500 text-xs">&#9733;</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="30"
+                      value={game.playerBLucky}
+                      onChange={(e) => updateGame(index, 'playerBLucky', e.target.value)}
+                      className="w-full bg-background border border-background-lighter rounded-lg px-2 py-1.5 text-yellow-400 text-center text-sm font-medium focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                      placeholder="0"
+                      title="Lucky points"
+                    />
+                    <div className="w-8"></div>
                   </div>
                   {gameErrors[index] && (
                     <p className="text-error text-xs mt-1 text-center">

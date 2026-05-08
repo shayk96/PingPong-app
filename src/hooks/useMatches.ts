@@ -51,9 +51,11 @@ export function useMatches(playerId?: string) {
       playerBId: input.playerBId,
       playerAScore: input.playerAScore,
       playerBScore: input.playerBScore,
-      matchType: input.matchType
+      matchType: input.matchType,
+      playerALuckyPoints: input.playerALuckyPoints ?? 0,
+      playerBLuckyPoints: input.playerBLuckyPoints ?? 0,
     })
-    await loadMatches() // Refresh list
+    await loadMatches()
   }, [loadMatches])
 
   const deleteMatch = useCallback(async (matchId: string): Promise<void> => {

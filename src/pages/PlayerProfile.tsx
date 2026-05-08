@@ -88,6 +88,7 @@ export default function PlayerProfile() {
         playerScore: m.playerAId === id ? m.playerAScore : m.playerBScore,
         opponentScore: m.playerAId === id ? m.playerBScore : m.playerAScore,
         eloDelta: m.winnerId === id ? m.winnerEloDelta : m.loserEloDelta,
+        playerLucky: m.playerAId === id ? (m.playerALuckyPoints || 0) : (m.playerBLuckyPoints || 0),
       }))
   }, [id, matches, players])
 
@@ -125,6 +126,18 @@ export default function PlayerProfile() {
     if (wins.length === 0) return 0
     const totalMargin = wins.reduce((sum, m) => sum + (m.playerScore - m.opponentScore), 0)
     return Math.round((totalMargin / wins.length) * 10) / 10
+  }, [playerMatches])
+
+  // Average lucky points per game
+  const avgLucky = useMemo(() => {
+    if (playerMatches.length === 0) return 0
+    const totalLucky = playerMatches.reduce((sum, m) => sum + m.playerLucky, 0)
+    return Math.round((totalLucky / playerMatches.length) * 10) / 10
+  }, [playerMatches])
+
+  // 11-0 wins count
+  const perfectWins = useMemo(() => {
+    return playerMatches.filter(m => m.isWin && m.playerScore === 11 && m.opponentScore === 0).length
   }, [playerMatches])
 
   const startEditing = () => {
@@ -399,7 +412,7 @@ export default function PlayerProfile() {
       </div>
 
       {/* Secondary Stats */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="grid grid-cols-4 gap-2 mb-4">
         <div className="bg-background-light rounded-xl p-3 border border-background-lighter text-center">
           <div className="text-xl font-display font-bold text-white">{stats.totalGames}</div>
           <div className="text-xs text-gray-400">Games</div>
@@ -416,7 +429,19 @@ export default function PlayerProfile() {
           <div className="text-xl font-display font-bold text-white">{avgMargin}</div>
           <div className="text-xs text-gray-400">Avg Margin</div>
         </div>
+        <div className="bg-background-light rounded-xl p-3 border border-background-lighter text-center">
+          <div className="text-xl font-display font-bold text-yellow-400">{avgLucky}</div>
+          <div className="text-xs text-gray-400">Avg Lucky</div>
+        </div>
       </div>
+
+      {/* Perfect wins (11-0) */}
+      {perfectWins > 0 && (
+        <div className="mb-4 bg-background-light rounded-xl p-3 border border-accent/20 flex items-center justify-between">
+          <span className="text-sm text-gray-300">11-0 Wins</span>
+          <span className="text-xl font-display font-bold text-accent">{perfectWins}</span>
+        </div>
+      )}
 
       {/* Best / Worst Matchup */}
       {(bestMatchup || worstMatchup) && (
