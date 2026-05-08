@@ -135,9 +135,14 @@ export default function PlayerProfile() {
     return Math.round((totalLucky / playerMatches.length) * 10) / 10
   }, [playerMatches])
 
-  // 11-0 wins count
+  // 11-0 wins — count unique opponents beaten 11-0
   const perfectWins = useMemo(() => {
-    return playerMatches.filter(m => m.isWin && m.playerScore === 11 && m.opponentScore === 0).length
+    const opponents = new Set(
+      playerMatches
+        .filter(m => m.isWin && m.playerScore === 11 && m.opponentScore === 0)
+        .map(m => m.opponent?.id)
+    )
+    return opponents.size
   }, [playerMatches])
 
   const startEditing = () => {

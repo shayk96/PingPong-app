@@ -179,6 +179,7 @@ export default function Leaderboard() {
         games: data.games,
         avgLucky: data.games > 0 ? Math.round((data.total / data.games) * 10) / 10 : 0,
       }))
+      .filter(e => e.totalLucky > 0)
       .sort((a, b) => b.avgLucky - a.avgLucky)
   }, [matches, players])
 
@@ -786,33 +787,47 @@ export default function Leaderboard() {
       <Modal
         isOpen={showLuckyModal}
         onClose={() => setShowLuckyModal(false)}
-        title="Lucky Points Leaderboard"
+        title="Lucky Points"
         maxWidth="md"
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           {luckyLeaderboard.length > 0 ? (
-            <div className="space-y-1.5">
-              {luckyLeaderboard.map((entry, i) => (
-                <div
-                  key={entry.id}
-                  className="bg-background rounded-xl px-4 py-3 border border-background-lighter flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold text-gray-500 w-6 text-right">
-                      {i + 1}.
+            <>
+              {/* Table header */}
+              <div className="grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
+                <span>#</span>
+                <span>Player</span>
+                <span className="text-right">Avg</span>
+                <span className="text-right">Total</span>
+              </div>
+
+              <div className="space-y-1">
+                {luckyLeaderboard.map((entry, i) => (
+                  <div
+                    key={entry.id}
+                    className={`grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 items-center px-3 py-2.5 rounded-xl ${
+                      i === 0 ? 'bg-yellow-500/10 border border-yellow-500/25' : 'bg-background border border-background-lighter'
+                    }`}
+                  >
+                    <span className={`text-sm font-bold ${i === 0 ? 'text-yellow-400' : 'text-gray-500'}`}>
+                      {i + 1}
                     </span>
-                    <span className="text-sm font-medium text-white">{entry.name}</span>
+                    <span className={`text-sm font-medium truncate ${i === 0 ? 'text-yellow-300' : 'text-white'}`}>
+                      {entry.name}
+                    </span>
+                    <span className={`text-sm font-bold text-right ${i === 0 ? 'text-yellow-400' : 'text-yellow-400/80'}`}>
+                      {entry.avgLucky}
+                    </span>
+                    <span className="text-sm text-gray-500 text-right">
+                      {entry.totalLucky}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className="text-yellow-400 font-bold">{entry.avgLucky}/game</span>
-                    <span className="text-gray-500">{entry.totalLucky} total</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           ) : (
-            <div className="text-center py-6 text-gray-400 text-sm">
-              No match data yet
+            <div className="text-center py-8 text-gray-400 text-sm">
+              No lucky points recorded yet
             </div>
           )}
           <Button
