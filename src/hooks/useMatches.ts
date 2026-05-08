@@ -45,8 +45,8 @@ export function useMatches(playerId?: string) {
     loadMatches()
   }, [loadMatches])
 
-  const createMatch = useCallback(async (input: NewMatchInput): Promise<void> => {
-    await apiCreateMatch({
+  const createMatch = useCallback(async (input: NewMatchInput): Promise<Match> => {
+    const created = await apiCreateMatch({
       playerAId: input.playerAId,
       playerBId: input.playerBId,
       playerAScore: input.playerAScore,
@@ -56,6 +56,7 @@ export function useMatches(playerId?: string) {
       playerBLuckyPoints: input.playerBLuckyPoints ?? 0,
     })
     await loadMatches()
+    return created
   }, [loadMatches])
 
   const deleteMatch = useCallback(async (matchId: string): Promise<void> => {

@@ -25,7 +25,7 @@ type Phase = 'setup' | 'playing' | 'round-complete'
 export default function RoomSession() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, refresh: refreshPlayers } = usePlayers()
-  const { createMatch } = useMatches()
+  const { createMatch, undoMatch } = useMatches()
   const { toasts, showToast, removeToast } = useToast()
 
   // Setup phase
@@ -50,8 +50,26 @@ export default function RoomSession() {
   // 5+ player state across rounds
   const [playedPairs, setPlayedPairs] = useState<Set<string>>(new Set())
   const [gamesPlayedCount, setGamesPlayedCount] = useState<Map<string, number>>(new Map())
-  // Track whether odd-player match has been added this round
   const [oddMatchAdded, setOddMatchAdded] = useState(false)
+
+  // Mid-session management panels
+  const [showAddPlayerPanel, setShowAddPlayerPanel] = useState(false)
+  const [showRemovePlayerPanel, setShowRemovePlayerPanel] = useState(false)
+  const [showManualGamePanel, setShowManualGamePanel] = useState(false)
+  const [addPlayerSearch, setAddPlayerSearch] = useState('')
+  const [addPlayerNextGame, setAddPlayerNextGame] = useState(true)
+  const [manualPlayerA, setManualPlayerA] = useState<string>('')
+  const [manualPlayerB, setManualPlayerB] = useState<string>('')
+
+  // Edit game state
+  const [editingMatchIdx, setEditingMatchIdx] = useState<number | null>(null)
+  const [editScoreA, setEditScoreA] = useState('')
+  const [editScoreB, setEditScoreB] = useState('')
+  const [editLuckyA, setEditLuckyA] = useState('')
+  const [editLuckyB, setEditLuckyB] = useState('')
+
+  // Track backend match IDs so we can undo them
+  const [matchBackendIds, setMatchBackendIds] = useState<Map<number, string>>(new Map())
 
   const sortedPlayers = useMemo(
     () => [...players].sort((a, b) => a.displayName.localeCompare(b.displayName)),
@@ -63,6 +81,17 @@ export default function RoomSession() {
     const q = playerSearch.trim().toLowerCase()
     return sortedPlayers.filter(p => p.displayName.toLowerCase().includes(q))
   }, [sortedPlayers, playerSearch])
+
+  // Players available to add (not already in room)
+  const addablePlayers = useMemo(() => {
+    const roomIds = new Set(roomPlayers.map(p => p.id))
+    let list = players.filter(p => !roomIds.has(p.id))
+    if (addPlayerSearch.trim()) {
+      const q = addPlayerSearch.trim().toLowerCase()
+      list = list.filter(p => p.displayName.toLowerCase().includes(q))
+    }
+    return list.sort((a, b) => a.displayName.localeCompare(b.displayName))
+  }, [players, roomPlayers, addPlayerSearch])
 
   const togglePlayer = (id: string) => {
     setSelectedIds(prev => {
@@ -95,6 +124,7 @@ export default function RoomSession() {
     setPlayedPairs(new Set())
     setGamesPlayedCount(new Map())
     setOddMatchAdded(false)
+    setMatchBackendIds(new Map())
 
     const roundMatches = generateRound(shuffled, m, new Set(), new Map())
     setMatches(roundMatches)
@@ -105,7 +135,6 @@ export default function RoomSession() {
     setLuckyB('')
     setPhase('playing')
 
-    // Set first match to playing
     if (roundMatches.length > 0) {
       roundMatches[0].status = 'playing'
       setMatches([...roundMatches])
@@ -174,12 +203,16 @@ export default function RoomSession() {
 
     setSubmitting(true)
     try {
-      await createMatch(input)
+      const result = await createMatch(input)
+
+      // Store backend match ID for potential undo/edit
+      if (result?.id) {
+        setMatchBackendIds(prev => new Map(prev).set(currentMatchIndex, result.id))
+      }
 
       const winnerId = pAScore > pBScore ? match.playerA.id : match.playerB.id
       const loserId = winnerId === match.playerA.id ? match.playerB.id : match.playerA.id
 
-      // Update match result
       const updated = matches.map(m => ({ ...m }))
       updated[currentMatchIndex] = {
         ...updated[currentMatchIndex],
@@ -187,7 +220,6 @@ export default function RoomSession() {
         result: { scoreA: pAScore, scoreB: pBScore, winnerId, loserId },
       }
 
-      // Update played pairs and games count for 5+ mode
       const newPairs = addPlayedPair(playedPairs, match.playerA.id, match.playerB.id)
       setPlayedPairs(newPairs)
 
@@ -196,14 +228,12 @@ export default function RoomSession() {
       newCount.set(match.playerB.id, (newCount.get(match.playerB.id) || 0) + 1)
       setGamesPlayedCount(newCount)
 
-      // Resolve dependent matches for bracket modes
       let resolved = updated
       if (mode === '3-player') {
         resolved = resolve3PlayerMatch(updated, currentMatchIndex, roomPlayers)
       } else if (mode === '4-player') {
         resolved = resolve4PlayerMatch(updated, currentMatchIndex)
       } else if (mode === '5-plus' && !oddMatchAdded && roomPlayers.length % 2 === 1 && currentMatchIndex === 0) {
-        // Odd player plays winner of game 1
         const winner = winnerId === match.playerA.id ? match.playerA : match.playerB
         const pairedIds = new Set<string>()
         resolved.forEach(m => {
@@ -228,6 +258,241 @@ export default function RoomSession() {
     }
   }
 
+  // --- Add player mid-session ---
+  const handleAddPlayer = (player: User, putInNextGame: boolean) => {
+    const newRoomPlayers = [...roomPlayers, player]
+    setRoomPlayers(newRoomPlayers)
+
+    const newMode = getRoomMode(newRoomPlayers.length)
+    setMode(newMode)
+
+    if (putInNextGame) {
+      // Insert a match with the new player as the very next pending match
+      const nextId = matches.length > 0 ? Math.max(...matches.map(m => m.id)) + 1 : 0
+      // Find the player who has waited longest (least games played) to pair with
+      let partner: User | null = null
+      let minGames = Infinity
+      for (const p of roomPlayers) {
+        if (p.id === player.id) continue
+        const g = gamesPlayedCount.get(p.id) || 0
+        if (g < minGames) {
+          minGames = g
+          partner = p
+        }
+      }
+      if (!partner) partner = roomPlayers[0]
+
+      const newMatch: RoomMatch = {
+        id: nextId,
+        playerA: player,
+        playerB: partner,
+        status: 'pending',
+      }
+
+      // Insert right after the current playing match
+      const updated = [...matches]
+      const insertAt = currentMatchIndex + 1
+      updated.splice(insertAt, 0, newMatch)
+      setMatches(updated)
+    }
+
+    setShowAddPlayerPanel(false)
+    setAddPlayerSearch('')
+    showToast(`${player.displayName} joined the room`, 'success')
+  }
+
+  // --- Remove player mid-session ---
+  const handleRemovePlayer = (playerId: string) => {
+    const player = roomPlayers.find(p => p.id === playerId)
+    if (!player) return
+
+    const newRoomPlayers = roomPlayers.filter(p => p.id !== playerId)
+    if (newRoomPlayers.length < 2) {
+      showToast('Need at least 2 players to continue', 'error')
+      return
+    }
+
+    setRoomPlayers(newRoomPlayers)
+    setMode(getRoomMode(newRoomPlayers.length))
+
+    // Remove player from pending matches
+    let updated = matches.map(m => ({ ...m }))
+    const currentPlaying = updated[currentMatchIndex]
+
+    // If the removed player is in the current match, skip it
+    if (currentPlaying?.status === 'playing' &&
+      (currentPlaying.playerA.id === playerId || currentPlaying.playerB.id === playerId)) {
+      updated[currentMatchIndex] = { ...updated[currentMatchIndex], status: 'pending' }
+      // Remove matches involving this player that are pending
+      updated = updated.filter(m =>
+        m.status === 'done' || (m.playerA.id !== playerId && m.playerB.id !== playerId)
+      )
+      setMatches(updated)
+      advanceToNextMatch(updated)
+    } else {
+      // Just remove pending matches involving this player
+      updated = updated.filter(m =>
+        m.status === 'done' || m.status === 'playing' || (m.playerA.id !== playerId && m.playerB.id !== playerId)
+      )
+      setMatches(updated)
+    }
+
+    setShowRemovePlayerPanel(false)
+    showToast(`${player.displayName} left the room`, 'info')
+  }
+
+  // --- Delete a completed game ---
+  const handleDeleteGame = async (matchIdx: number) => {
+    const match = matches[matchIdx]
+    if (!match || match.status !== 'done') return
+
+    const backendId = matchBackendIds.get(matchIdx)
+    if (backendId) {
+      try {
+        await undoMatch(backendId)
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : 'Failed to undo match on server', 'error')
+        return
+      }
+    }
+
+    const updated = matches.filter((_, i) => i !== matchIdx)
+    // Reindex backend IDs
+    const newBackendIds = new Map<number, string>()
+    matchBackendIds.forEach((bid, oldIdx) => {
+      if (oldIdx === matchIdx) return
+      const newIdx = oldIdx > matchIdx ? oldIdx - 1 : oldIdx
+      newBackendIds.set(newIdx, bid)
+    })
+    setMatchBackendIds(newBackendIds)
+
+    // Adjust currentMatchIndex if needed
+    if (currentMatchIndex > matchIdx) {
+      setCurrentMatchIndex(prev => prev - 1)
+    }
+
+    setMatches(updated)
+    showToast('Game deleted and reverted', 'success')
+  }
+
+  // --- Edit a completed game ---
+  const startEditGame = (matchIdx: number) => {
+    const match = matches[matchIdx]
+    if (!match?.result) return
+    setEditingMatchIdx(matchIdx)
+    setEditScoreA(String(match.result.scoreA))
+    setEditScoreB(String(match.result.scoreB))
+    setEditLuckyA('0')
+    setEditLuckyB('0')
+  }
+
+  const cancelEditGame = () => {
+    setEditingMatchIdx(null)
+    setEditScoreA('')
+    setEditScoreB('')
+    setEditLuckyA('')
+    setEditLuckyB('')
+  }
+
+  const handleSaveEditGame = async () => {
+    if (editingMatchIdx === null) return
+    const match = matches[editingMatchIdx]
+    if (!match) return
+
+    const pAScore = parseInt(editScoreA) || 0
+    const pBScore = parseInt(editScoreB) || 0
+    const pALucky = parseInt(editLuckyA) || 0
+    const pBLucky = parseInt(editLuckyB) || 0
+
+    if (pALucky > pAScore) {
+      showToast(`Lucky points can't exceed score (${pAScore})`, 'error')
+      return
+    }
+    if (pBLucky > pBScore) {
+      showToast(`Lucky points can't exceed score (${pBScore})`, 'error')
+      return
+    }
+
+    const input: NewMatchInput = {
+      playerAId: match.playerA.id,
+      playerBId: match.playerB.id,
+      playerAScore: pAScore,
+      playerBScore: pBScore,
+      matchType: 11,
+      playerALuckyPoints: pALucky,
+      playerBLuckyPoints: pBLucky,
+    }
+
+    const validation = validateMatch(input)
+    if (!validation.isValid) {
+      showToast(validation.error || 'Invalid score', 'error')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      // Undo old match on backend
+      const backendId = matchBackendIds.get(editingMatchIdx)
+      if (backendId) {
+        await undoMatch(backendId)
+      }
+
+      // Create new match
+      const result = await createMatch(input)
+      if (result?.id) {
+        setMatchBackendIds(prev => new Map(prev).set(editingMatchIdx, result.id))
+      }
+
+      const winnerId = pAScore > pBScore ? match.playerA.id : match.playerB.id
+      const loserId = winnerId === match.playerA.id ? match.playerB.id : match.playerA.id
+
+      const updated = matches.map(m => ({ ...m }))
+      updated[editingMatchIdx] = {
+        ...updated[editingMatchIdx],
+        status: 'done',
+        result: { scoreA: pAScore, scoreB: pBScore, winnerId, loserId },
+      }
+      setMatches(updated)
+
+      cancelEditGame()
+      showToast('Game updated!', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update match', 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // --- Add manual game ---
+  const handleAddManualGame = () => {
+    if (!manualPlayerA || !manualPlayerB || manualPlayerA === manualPlayerB) {
+      showToast('Select two different players', 'error')
+      return
+    }
+    const pA = roomPlayers.find(p => p.id === manualPlayerA)
+    const pB = roomPlayers.find(p => p.id === manualPlayerB)
+    if (!pA || !pB) return
+
+    const nextId = matches.length > 0 ? Math.max(...matches.map(m => m.id)) + 1 : 0
+    const newMatch: RoomMatch = {
+      id: nextId,
+      playerA: pA,
+      playerB: pB,
+      status: 'pending',
+    }
+
+    // Insert right after the current match
+    const updated = [...matches]
+    const insertAt = currentMatchIndex + 1
+    updated.splice(insertAt, 0, newMatch)
+    setMatches(updated)
+
+    setManualPlayerA('')
+    setManualPlayerB('')
+    setShowManualGamePanel(false)
+    showToast(`Manual game added: ${pA.displayName} vs ${pB.displayName}`, 'success')
+  }
+
   const startNewRound = () => {
     const rPlayers = mode === '3-player' ? roomPlayers : shufflePlayers(roomPlayers)
     const roundMatches = generateRound(rPlayers, mode, playedPairs, gamesPlayedCount)
@@ -239,6 +504,7 @@ export default function RoomSession() {
     setLuckyB('')
     setOddMatchAdded(false)
     setRoundNumber(prev => prev + 1)
+    setMatchBackendIds(new Map())
 
     if (roundMatches.length > 0) {
       roundMatches[0].status = 'playing'
@@ -374,18 +640,162 @@ export default function RoomSession() {
       {/* === PLAYING PHASE === */}
       {phase === 'playing' && currentMatch && (
         <div className="space-y-4">
-          {/* Progress */}
+          {/* Progress + Actions */}
           <div className="flex items-center justify-between text-sm text-gray-400">
             <span>Match {completedCount + 1}{expectedTotal ? ` of ${expectedTotal}` : ''}</span>
-            <button
-              onClick={() => {
-                if (confirm('End session? Completed matches are already saved.')) endSession()
-              }}
-              className="text-xs text-gray-500 hover:text-error transition-colors"
-            >
-              End Session
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setShowAddPlayerPanel(p => !p)
+                  setShowRemovePlayerPanel(false)
+                  setShowManualGamePanel(false)
+                }}
+                className="text-xs text-accent hover:text-accent/80 transition-colors"
+                title="Add player"
+              >
+                + Player
+              </button>
+              <button
+                onClick={() => {
+                  setShowRemovePlayerPanel(p => !p)
+                  setShowAddPlayerPanel(false)
+                  setShowManualGamePanel(false)
+                }}
+                className="text-xs text-orange-400 hover:text-orange-300 transition-colors"
+                title="Remove player"
+              >
+                − Player
+              </button>
+              <button
+                onClick={() => {
+                  setShowManualGamePanel(p => !p)
+                  setShowAddPlayerPanel(false)
+                  setShowRemovePlayerPanel(false)
+                }}
+                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                title="Add manual game"
+              >
+                + Game
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm('End session? Completed matches are already saved.')) endSession()
+                }}
+                className="text-xs text-gray-500 hover:text-error transition-colors"
+              >
+                End
+              </button>
+            </div>
           </div>
+
+          {/* Add Player Panel */}
+          {showAddPlayerPanel && (
+            <div className="bg-background-light rounded-xl p-3 border border-accent/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-accent uppercase tracking-wider">Add Player</span>
+                <button onClick={() => setShowAddPlayerPanel(false)} className="text-gray-500 hover:text-white text-xs">✕</button>
+              </div>
+              {addablePlayers.length > 4 && (
+                <input
+                  type="search"
+                  value={addPlayerSearch}
+                  onChange={e => setAddPlayerSearch(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full px-3 py-1.5 rounded-lg bg-background border border-background-lighter text-white placeholder-gray-500 text-xs focus:outline-none focus:ring-1 focus:ring-accent/50"
+                />
+              )}
+              <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={addPlayerNextGame}
+                  onChange={e => setAddPlayerNextGame(e.target.checked)}
+                  className="rounded border-gray-600 bg-background"
+                />
+                Put in next game
+              </label>
+              <div className="max-h-36 overflow-y-auto space-y-1">
+                {addablePlayers.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => handleAddPlayer(p, addPlayerNextGame)}
+                    className="w-full text-left px-3 py-2 rounded-lg bg-background hover:bg-background-lighter text-sm text-gray-300 hover:text-white transition-colors"
+                  >
+                    {p.displayName}
+                  </button>
+                ))}
+                {addablePlayers.length === 0 && (
+                  <p className="text-xs text-gray-500 text-center py-2">No players available</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Remove Player Panel */}
+          {showRemovePlayerPanel && (
+            <div className="bg-background-light rounded-xl p-3 border border-orange-500/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-orange-400 uppercase tracking-wider">Remove Player</span>
+                <button onClick={() => setShowRemovePlayerPanel(false)} className="text-gray-500 hover:text-white text-xs">✕</button>
+              </div>
+              <div className="max-h-36 overflow-y-auto space-y-1">
+                {roomPlayers.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      if (confirm(`Remove ${p.displayName} from the room?`)) handleRemovePlayer(p.id)
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg bg-background hover:bg-red-900/30 text-sm text-gray-300 hover:text-red-300 transition-colors flex items-center justify-between"
+                  >
+                    <span>{p.displayName}</span>
+                    <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Manual Game Panel */}
+          {showManualGamePanel && (
+            <div className="bg-background-light rounded-xl p-3 border border-blue-500/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Add Manual Game</span>
+                <button onClick={() => setShowManualGamePanel(false)} className="text-gray-500 hover:text-white text-xs">✕</button>
+              </div>
+              <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                <select
+                  value={manualPlayerA}
+                  onChange={e => setManualPlayerA(e.target.value)}
+                  className="w-full px-2 py-2 rounded-lg bg-background border border-background-lighter text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                >
+                  <option value="">Player A</option>
+                  {roomPlayers.map(p => (
+                    <option key={p.id} value={p.id}>{p.displayName}</option>
+                  ))}
+                </select>
+                <span className="text-gray-500 text-xs">vs</span>
+                <select
+                  value={manualPlayerB}
+                  onChange={e => setManualPlayerB(e.target.value)}
+                  className="w-full px-2 py-2 rounded-lg bg-background border border-background-lighter text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                >
+                  <option value="">Player B</option>
+                  {roomPlayers.filter(p => p.id !== manualPlayerA).map(p => (
+                    <option key={p.id} value={p.id}>{p.displayName}</option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                onClick={handleAddManualGame}
+                variant="primary"
+                disabled={!manualPlayerA || !manualPlayerB || manualPlayerA === manualPlayerB}
+                className="w-full text-sm"
+              >
+                Add to Next
+              </Button>
+            </div>
+          )}
 
           {/* Live Standings */}
           {completedCount > 0 && (
@@ -543,12 +953,61 @@ export default function RoomSession() {
             <div>
               <h3 className="text-sm font-medium text-gray-400 mb-2">Completed</h3>
               <div className="space-y-1.5">
-                {matches.filter(m => m.status === 'done').map(m => {
+                {matches.map((m, idx) => {
+                  if (m.status !== 'done') return null
                   const winnerIsA = m.result!.winnerId === m.playerA.id
+                  const isEditing = editingMatchIdx === idx
+
+                  if (isEditing) {
+                    return (
+                      <div key={m.id} className="bg-background-light rounded-xl px-4 py-3 border-2 border-blue-500/40 space-y-2">
+                        <div className="flex items-center justify-between text-xs text-blue-400 font-semibold">
+                          <span>Edit: {m.playerA.displayName} vs {m.playerB.displayName}</span>
+                          <button onClick={cancelEditGame} className="text-gray-500 hover:text-white">✕</button>
+                        </div>
+                        <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
+                          <input
+                            type="number" min="0" max="30"
+                            value={editScoreA}
+                            onChange={e => setEditScoreA(e.target.value)}
+                            className="w-full bg-background border border-background-lighter rounded-lg px-2 py-2 text-white text-center text-lg font-bold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                          <span className="text-gray-500 text-xs">–</span>
+                          <input
+                            type="number" min="0" max="30"
+                            value={editScoreB}
+                            onChange={e => setEditScoreB(e.target.value)}
+                            className="w-full bg-background border border-background-lighter rounded-lg px-2 py-2 text-white text-center text-lg font-bold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
+                          <input
+                            type="number" min="0" max="30"
+                            value={editLuckyA}
+                            onChange={e => setEditLuckyA(e.target.value)}
+                            className="w-full bg-background border border-background-lighter rounded-lg px-1 py-1 text-yellow-400 text-center text-xs focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                            placeholder="0"
+                          />
+                          <span className="text-yellow-500 text-[10px]">&#9733;</span>
+                          <input
+                            type="number" min="0" max="30"
+                            value={editLuckyB}
+                            onChange={e => setEditLuckyB(e.target.value)}
+                            className="w-full bg-background border border-background-lighter rounded-lg px-1 py-1 text-yellow-400 text-center text-xs focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                            placeholder="0"
+                          />
+                        </div>
+                        <Button onClick={handleSaveEditGame} variant="primary" loading={submitting} disabled={!editScoreA || !editScoreB} className="w-full text-sm">
+                          Save Changes
+                        </Button>
+                      </div>
+                    )
+                  }
+
                   return (
                     <div
                       key={m.id}
-                      className="bg-background-light rounded-xl px-4 py-2.5 border border-background-lighter flex items-center justify-between"
+                      className="bg-background-light rounded-xl px-4 py-2.5 border border-background-lighter flex items-center justify-between group"
                     >
                       <div className="flex items-center gap-2 text-sm">
                         <span className={winnerIsA ? 'text-success font-semibold' : 'text-gray-400'}>
@@ -559,9 +1018,31 @@ export default function RoomSession() {
                           {m.playerB.displayName}
                         </span>
                       </div>
-                      <span className="text-sm font-bold text-white">
-                        {m.result!.scoreA}–{m.result!.scoreB}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white">
+                          {m.result!.scoreA}–{m.result!.scoreB}
+                        </span>
+                        <button
+                          onClick={() => startEditGame(idx)}
+                          className="text-gray-600 hover:text-blue-400 active:text-blue-400 transition-all p-1"
+                          title="Edit"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm('Delete this game? This will undo the match on the server.')) handleDeleteGame(idx)
+                          }}
+                          className="text-gray-600 hover:text-red-400 active:text-red-400 transition-all p-1"
+                          title="Delete"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
@@ -584,12 +1065,61 @@ export default function RoomSession() {
           <div>
             <h3 className="text-sm font-medium text-gray-400 mb-2">Results</h3>
             <div className="space-y-1.5">
-              {matches.filter(m => m.status === 'done').map(m => {
+              {matches.map((m, idx) => {
+                if (m.status !== 'done') return null
                 const winnerIsA = m.result!.winnerId === m.playerA.id
+                const isEditing = editingMatchIdx === idx
+
+                if (isEditing) {
+                  return (
+                    <div key={m.id} className="bg-background-light rounded-xl px-4 py-3 border-2 border-blue-500/40 space-y-2">
+                      <div className="flex items-center justify-between text-xs text-blue-400 font-semibold">
+                        <span>Edit: {m.playerA.displayName} vs {m.playerB.displayName}</span>
+                        <button onClick={cancelEditGame} className="text-gray-500 hover:text-white">✕</button>
+                      </div>
+                      <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
+                        <input
+                          type="number" min="0" max="30"
+                          value={editScoreA}
+                          onChange={e => setEditScoreA(e.target.value)}
+                          className="w-full bg-background border border-background-lighter rounded-lg px-2 py-2 text-white text-center text-lg font-bold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <span className="text-gray-500 text-xs">–</span>
+                        <input
+                          type="number" min="0" max="30"
+                          value={editScoreB}
+                          onChange={e => setEditScoreB(e.target.value)}
+                          className="w-full bg-background border border-background-lighter rounded-lg px-2 py-2 text-white text-center text-lg font-bold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
+                        <input
+                          type="number" min="0" max="30"
+                          value={editLuckyA}
+                          onChange={e => setEditLuckyA(e.target.value)}
+                          className="w-full bg-background border border-background-lighter rounded-lg px-1 py-1 text-yellow-400 text-center text-xs focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                          placeholder="0"
+                        />
+                        <span className="text-yellow-500 text-[10px]">&#9733;</span>
+                        <input
+                          type="number" min="0" max="30"
+                          value={editLuckyB}
+                          onChange={e => setEditLuckyB(e.target.value)}
+                          className="w-full bg-background border border-background-lighter rounded-lg px-1 py-1 text-yellow-400 text-center text-xs focus:outline-none focus:ring-1 focus:ring-yellow-500/50"
+                          placeholder="0"
+                        />
+                      </div>
+                      <Button onClick={handleSaveEditGame} variant="primary" loading={submitting} disabled={!editScoreA || !editScoreB} className="w-full text-sm">
+                        Save Changes
+                      </Button>
+                    </div>
+                  )
+                }
+
                 return (
                   <div
                     key={m.id}
-                    className="bg-background-light rounded-xl px-4 py-2.5 border border-background-lighter flex items-center justify-between"
+                    className="bg-background-light rounded-xl px-4 py-2.5 border border-background-lighter flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-2 text-sm">
                       <span className={winnerIsA ? 'text-success font-semibold' : 'text-gray-400'}>
@@ -600,9 +1130,31 @@ export default function RoomSession() {
                         {m.playerB.displayName}
                       </span>
                     </div>
-                    <span className="text-sm font-bold text-white">
-                      {m.result!.scoreA}–{m.result!.scoreB}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white">
+                        {m.result!.scoreA}–{m.result!.scoreB}
+                      </span>
+                      <button
+                        onClick={() => startEditGame(idx)}
+                        className="text-gray-600 hover:text-blue-400 active:text-blue-400 transition-all p-1"
+                        title="Edit"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm('Delete this game? This will undo the match on the server.')) handleDeleteGame(idx)
+                        }}
+                        className="text-gray-600 hover:text-red-400 active:text-red-400 transition-all p-1"
+                        title="Delete"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 )
               })}
