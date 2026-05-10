@@ -457,9 +457,7 @@ export default function PlayerProfile() {
         <div className="mb-4 bg-background-light rounded-xl p-3 border border-accent/20">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M7 5H23L19.5 8.5L23 12H7L3 17H1V15L4 11L1 7V5H3L7 5Z" />
-              </svg>
+              <span className="text-lg leading-none">🔫</span>
               <span className="text-sm font-semibold text-white">11-0 Wins</span>
             </div>
             <span className="text-lg font-display font-bold text-accent">{perfectWinsList.length}</span>
