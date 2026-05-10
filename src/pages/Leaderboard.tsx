@@ -496,18 +496,16 @@ export default function Leaderboard() {
             onDeletePlayer={handleDeletePlayerClick}
             matches={matches}
           />
-          {inactiveCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowInactivePlayers(prev => !prev)}
-              className="w-full mt-3 py-2.5 rounded-xl border border-background-lighter text-gray-400 text-sm font-medium hover:bg-background-lighter hover:text-gray-300 transition-colors"
-            >
-              {showInactivePlayers
-                ? 'Hide inactive players'
-                : `Show inactive players (${inactiveCount})`
-              }
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowInactivePlayers(prev => !prev)}
+            className="w-full mt-3 py-2.5 rounded-xl border border-background-lighter text-gray-400 text-sm font-medium hover:bg-background-lighter hover:text-gray-300 transition-colors"
+          >
+            {showInactivePlayers
+              ? 'Hide inactive players'
+              : `Show inactive players${inactiveCount > 0 ? ` (${inactiveCount})` : ''}`
+            }
+          </button>
         </section>
       )}
 

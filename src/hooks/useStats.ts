@@ -103,17 +103,8 @@ const INACTIVITY_GRACE_DAYS = 14
 /**
  * Check if player is inactive (hasn't played in more than grace period)
  */
-export function isPlayerInactive(lastPlayedAt: Date | undefined, totalGames?: number): boolean {
-  if (!lastPlayedAt) {
-    // Players who have never played are not considered inactive (they're just new)
-    // But players with games and no lastPlayedAt are treated as inactive
-    return (totalGames ?? 0) > 0
-  }
-  
-  const now = new Date()
-  const daysSinceLastPlayed = Math.floor((now.getTime() - new Date(lastPlayedAt).getTime()) / (1000 * 60 * 60 * 24))
-  
-  return daysSinceLastPlayed > INACTIVITY_GRACE_DAYS
+export function isPlayerInactive(_lastPlayedAt: Date | undefined, totalGames?: number): boolean {
+  return (totalGames ?? 0) < MIN_GAMES_FOR_RANKING
 }
 
 /**
