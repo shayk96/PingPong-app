@@ -165,11 +165,12 @@ function smartPair(
   const pairs: [User, User][] = []
   const used = new Set<string>()
 
-  // Greedy: take next unpaired player, find best partner
+  // Greedy: take next unpaired player, find best partner (prefer fresh matchup)
   for (const player of sortedPlayers) {
     if (used.has(player.id)) continue
 
     let bestPartner: User | null = null
+    let fallback: User | null = null
     for (const candidate of sortedPlayers) {
       if (candidate.id === player.id || used.has(candidate.id)) continue
       const key = pairKey(player.id, candidate.id)
@@ -177,13 +178,30 @@ function smartPair(
         bestPartner = candidate
         break
       }
-      if (!bestPartner) bestPartner = candidate
+      if (!fallback) fallback = candidate
     }
 
-    if (bestPartner) {
-      pairs.push([player, bestPartner])
+    const partner = bestPartner || fallback
+    if (partner) {
+      pairs.push([player, partner])
       used.add(player.id)
-      used.add(bestPartner.id)
+      used.add(partner.id)
+    }
+  }
+
+  // Verify no player appears in consecutive pairs (back-to-back games)
+  for (let i = 1; i < pairs.length; i++) {
+    const prevIds = new Set([pairs[i - 1][0].id, pairs[i - 1][1].id])
+    const currIds = [pairs[i][0].id, pairs[i][1].id]
+    if (currIds.some(id => prevIds.has(id))) {
+      // Try to swap with a later pair to break the consecutive
+      for (let j = i + 1; j < pairs.length; j++) {
+        const swapIds = [pairs[j][0].id, pairs[j][1].id]
+        if (!swapIds.some(id => prevIds.has(id))) {
+          ;[pairs[i], pairs[j]] = [pairs[j], pairs[i]]
+          break
+        }
+      }
     }
   }
 

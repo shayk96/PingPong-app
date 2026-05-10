@@ -27,7 +27,7 @@ type Phase = 'setup' | 'playing' | 'round-complete'
 export default function RoomSession() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, refresh: refreshPlayers } = usePlayers()
-  const { matches: globalMatches, createMatch, undoMatch } = useMatches()
+  const { matches: globalMatches, createMatch, undoMatch, refresh: refreshMatches } = useMatches()
   const leaderboard = useLeaderboard(players, globalMatches)
   const { toasts, showToast, removeToast } = useToast()
 
@@ -262,6 +262,9 @@ export default function RoomSession() {
       setMatches(resolved)
       advanceToNextMatch(resolved)
 
+      refreshPlayers()
+      refreshMatches()
+
       showToast('Score saved!', 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save match', 'error')
@@ -279,19 +282,49 @@ export default function RoomSession() {
     setMode(newMode)
 
     if (putInNextGame) {
-      // Insert a match with the new player as the very next pending match
       const nextId = matches.length > 0 ? Math.max(...matches.map(m => m.id)) + 1 : 0
-      // Find the player who has waited longest (least games played) to pair with
+
+      // Determine who is playing in the current match so we don't pick them
+      const currentlyPlayingIds = new Set<string>()
+      const curMatch = matches[currentMatchIndex]
+      if (curMatch && curMatch.status === 'playing') {
+        currentlyPlayingIds.add(curMatch.playerA.id)
+        currentlyPlayingIds.add(curMatch.playerB.id)
+      }
+
+      // Also check the match right after insertion point to avoid back-to-back
+      const nextPending = matches.find((m, i) => i > currentMatchIndex && m.status === 'pending')
+      const nextPendingIds = new Set<string>()
+      if (nextPending) {
+        nextPendingIds.add(nextPending.playerA.id)
+        nextPendingIds.add(nextPending.playerB.id)
+      }
+
+      // Find partner: least games played, not currently playing, not a repeat pairing if possible
       let partner: User | null = null
+      let fallbackPartner: User | null = null
       let minGames = Infinity
+      let fallbackMinGames = Infinity
+
       for (const p of roomPlayers) {
         if (p.id === player.id) continue
+        if (currentlyPlayingIds.has(p.id)) continue
+
         const g = gamesPlayedCount.get(p.id) || 0
-        if (g < minGames) {
+        const key = [player.id, p.id].sort().join(':')
+        const alreadyPlayed = playedPairs.has(key)
+
+        if (!alreadyPlayed && g < minGames) {
           minGames = g
           partner = p
         }
+        if (g < fallbackMinGames) {
+          fallbackMinGames = g
+          fallbackPartner = p
+        }
       }
+
+      if (!partner) partner = fallbackPartner
       if (!partner) partner = roomPlayers[0]
 
       const newMatch: RoomMatch = {
@@ -301,7 +334,6 @@ export default function RoomSession() {
         status: 'pending',
       }
 
-      // Insert right after the current playing match
       const updated = [...matches]
       const insertAt = currentMatchIndex + 1
       updated.splice(insertAt, 0, newMatch)
@@ -384,6 +416,8 @@ export default function RoomSession() {
     }
 
     setMatches(updated)
+    refreshPlayers()
+    refreshMatches()
     showToast('Game deleted and reverted', 'success')
   }
 
@@ -467,6 +501,8 @@ export default function RoomSession() {
       setMatches(updated)
 
       cancelEditGame()
+      refreshPlayers()
+      refreshMatches()
       showToast('Game updated!', 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to update match', 'error')
@@ -503,6 +539,79 @@ export default function RoomSession() {
     setManualPlayerB('')
     setShowManualGamePanel(false)
     showToast(`Manual game added: ${pA.displayName} vs ${pB.displayName}`, 'success')
+  }
+
+  // --- Skip current game ---
+  const handleSkipGame = () => {
+    const updated = matches.map(m => ({ ...m }))
+    const current = updated[currentMatchIndex]
+    if (!current || current.status !== 'playing') return
+
+    // Move current match to end of pending list
+    updated.splice(currentMatchIndex, 1)
+    current.status = 'pending'
+    updated.push(current)
+
+    // Find next pending match
+    const nextIdx = updated.findIndex(m => m.status === 'pending')
+    if (nextIdx !== -1) {
+      updated[nextIdx].status = 'playing'
+      setCurrentMatchIndex(nextIdx)
+    }
+    setMatches(updated)
+    setScoreA('')
+    setScoreB('')
+    setLuckyA('')
+    setLuckyB('')
+    showToast('Game skipped', 'info')
+  }
+
+  // --- Reshuffle remaining games ---
+  const handleReshuffle = () => {
+    const done = matches.filter(m => m.status === 'done')
+    const playing = matches.find(m => m.status === 'playing')
+    const pending = matches.filter(m => m.status === 'pending')
+
+    if (pending.length === 0) {
+      showToast('No pending games to reshuffle', 'info')
+      return
+    }
+
+    // Collect players from pending matches
+    const pendingPlayerIds = new Set<string>()
+    pending.forEach(m => {
+      pendingPlayerIds.add(m.playerA.id)
+      pendingPlayerIds.add(m.playerB.id)
+    })
+    if (playing) {
+      pendingPlayerIds.delete(playing.playerA.id)
+      pendingPlayerIds.delete(playing.playerB.id)
+    }
+
+    const pendingPlayers = roomPlayers.filter(p => pendingPlayerIds.has(p.id))
+    const newPending = generate5PlusRound(pendingPlayers, playedPairs, gamesPlayedCount)
+
+    // Reassign IDs
+    const baseId = matches.length > 0 ? Math.max(...matches.map(m => m.id)) + 1 : 0
+    newPending.forEach((m, i) => { m.id = baseId + i })
+
+    const rebuilt = [...done]
+    if (playing) rebuilt.push(playing)
+    rebuilt.push(...newPending)
+
+    const playingIdx = rebuilt.findIndex(m => m.status === 'playing')
+    setCurrentMatchIndex(playingIdx >= 0 ? playingIdx : rebuilt.findIndex(m => m.status === 'pending'))
+
+    if (playingIdx === -1) {
+      const nextPend = rebuilt.findIndex(m => m.status === 'pending')
+      if (nextPend !== -1) {
+        rebuilt[nextPend].status = 'playing'
+        setCurrentMatchIndex(nextPend)
+      }
+    }
+
+    setMatches(rebuilt)
+    showToast('Games reshuffled', 'success')
   }
 
   const startNewRound = () => {
@@ -688,6 +797,20 @@ export default function RoomSession() {
                 title="Add manual game"
               >
                 + Game
+              </button>
+              <button
+                onClick={handleSkipGame}
+                className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                title="Skip current game"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleReshuffle}
+                className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
+                title="Reshuffle remaining games"
+              >
+                Reshuffle
               </button>
               <button
                 onClick={() => {
