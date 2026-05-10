@@ -12,16 +12,20 @@ interface LeaderboardTableProps {
 export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: LeaderboardTableProps) {
   const navigate = useNavigate()
 
-  // Count total 11-0 wins per player
-  const perfectWinsMap = useMemo(() => {
-    const map = new Map<string, number>()
-    if (matches.length === 0) return map
+  // Count unique opponents beaten per player (1 "gun" per unique opponent defeated)
+  const uniqueKillsMap = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    if (matches.length === 0) return new Map<string, number>()
     for (const m of matches) {
-      if ((m.playerAScore === 11 && m.playerBScore === 0) || (m.playerBScore === 11 && m.playerAScore === 0)) {
-        map.set(m.winnerId, (map.get(m.winnerId) || 0) + 1)
-      }
+      const loserId = m.winnerId === m.playerAId ? m.playerBId : m.playerAId
+      if (!map.has(m.winnerId)) map.set(m.winnerId, new Set())
+      map.get(m.winnerId)!.add(loserId)
     }
-    return map
+    const result = new Map<string, number>()
+    for (const [id, opponents] of map) {
+      result.set(id, opponents.size)
+    }
+    return result
   }, [matches])
 
   if (entries.length === 0) {
@@ -35,7 +39,7 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
   return (
     <div className="space-y-2">
       {entries.map((entry, index) => {
-        const pw = perfectWinsMap.get(entry.user.id) || 0
+        const kills = uniqueKillsMap.get(entry.user.id) || 0
         return (
           <div
             key={entry.user.id}
@@ -52,15 +56,15 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
             <div className="flex-1 min-w-0">
               <div className={`font-semibold truncate flex items-center gap-1.5 ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
                 {entry.user.displayName}
-                {pw > 0 && (
+                {kills > 0 && (
                   <span
-                    className="relative inline-flex items-center justify-center flex-shrink-0"
-                    title={`${pw} total 11-0 win${pw > 1 ? 's' : ''}`}
+                    className="inline-flex items-center gap-0.5 flex-shrink-0"
+                    title={`Defeated ${kills} unique opponent${kills > 1 ? 's' : ''}`}
                   >
-                    <svg className="w-6 h-6 text-accent drop-shadow-[0_0_3px_rgba(249,115,22,0.4)]" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    <svg className="w-4 h-4 text-accent drop-shadow-[0_0_3px_rgba(249,115,22,0.4)]" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M7 5H23L19.5 8.5L23 12H7L3 17H1V15L4 11L1 7V5H3L7 5Z" />
                     </svg>
-                    <span className="absolute text-[9px] font-bold text-white" style={{ top: '6px' }}>{pw}</span>
+                    <span className="text-[10px] font-bold text-accent">{kills}</span>
                   </span>
                 )}
               </div>

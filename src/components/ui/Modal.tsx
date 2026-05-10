@@ -45,7 +45,7 @@ export function Modal({ isOpen, onClose, children, title, maxWidth = 'md' }: Mod
       />
       
       {/* Modal content */}
-      <div className={`relative bg-background-light rounded-2xl p-6 w-full ${maxWidthClasses[maxWidth]} animate-slide-up border border-background-lighter shadow-2xl`}>
+      <div className={`relative bg-background-light rounded-2xl p-6 w-full max-h-[90vh] overflow-y-auto ${maxWidthClasses[maxWidth]} animate-slide-up border border-background-lighter shadow-2xl`}>
         {title && (
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white">{title}</h2>

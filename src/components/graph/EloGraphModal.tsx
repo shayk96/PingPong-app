@@ -272,7 +272,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
               aria-label="Search players"
             />
           )}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
             {filteredPlayers.map((player) => {
               const isSelected = selectedPlayerIds.includes(player.id)
               const colorIndex = selectedPlayerIds.indexOf(player.id)

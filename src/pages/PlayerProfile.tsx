@@ -458,7 +458,7 @@ export default function PlayerProfile() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" />
+                <path d="M7 5H23L19.5 8.5L23 12H7L3 17H1V15L4 11L1 7V5H3L7 5Z" />
               </svg>
               <span className="text-sm font-semibold text-white">11-0 Wins</span>
             </div>
