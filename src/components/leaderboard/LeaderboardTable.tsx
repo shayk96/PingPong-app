@@ -1,19 +1,35 @@
-/**
- * Leaderboard table component
- * Displays player rankings with ELO and stats
- */
-
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { LeaderboardEntry } from '../../types'
+import type { LeaderboardEntry, Match } from '../../types'
 import { getRatingTier } from '../../lib/elo'
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[]
   onDeletePlayer?: (playerId: string, playerName: string) => void
+  matches?: Match[]
 }
 
-export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTableProps) {
+export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: LeaderboardTableProps) {
   const navigate = useNavigate()
+
+  // Compute 11-0 unique opponent count per player
+  const perfectWinsMap = useMemo(() => {
+    const map = new Map<string, number>()
+    if (matches.length === 0) return map
+    const playerOpps = new Map<string, Set<string>>()
+    for (const m of matches) {
+      if (m.playerAScore === 11 && m.playerBScore === 0) {
+        if (!playerOpps.has(m.winnerId)) playerOpps.set(m.winnerId, new Set())
+        playerOpps.get(m.winnerId)!.add(m.loserId)
+      } else if (m.playerBScore === 11 && m.playerAScore === 0) {
+        if (!playerOpps.has(m.winnerId)) playerOpps.set(m.winnerId, new Set())
+        playerOpps.get(m.winnerId)!.add(m.loserId)
+      }
+    }
+    playerOpps.forEach((opps, pid) => map.set(pid, opps.size))
+    return map
+  }, [matches])
+
   if (entries.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -24,70 +40,72 @@ export function LeaderboardTable({ entries, onDeletePlayer }: LeaderboardTablePr
 
   return (
     <div className="space-y-2">
-      {entries.map((entry, index) => (
-        <div
-          key={entry.user.id}
-          onClick={() => navigate(`/player/${entry.user.id}`)}
-          className="flex items-center gap-2 p-3 rounded-xl border border-transparent hover:border-background-lighter transition-all duration-200 cursor-pointer active:scale-[0.99] bg-background-light"
-          style={{ animationDelay: `${index * 50}ms` }}
-        >
-          {/* Rank */}
-          <div className="w-9 flex-shrink-0">
-            <RankBadge rank={entry.rank} isProvisional={entry.isProvisional} isInactive={entry.isInactive} />
-          </div>
-
-          {/* Player info */}
-          <div className="flex-1 min-w-0">
-            <div className={`font-semibold truncate flex items-center gap-1.5 ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
-              {entry.user.displayName}
-              {/* PAUSED: season champion badge hidden
-              {entry.user.seasonWins && entry.user.seasonWins.length > 0 && (
-                <span
-                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 text-[10px] font-bold flex-shrink-0"
-                  title={`Season ${entry.user.seasonWins.join(', ')} Champion`}
-                >
-                  🏆 {entry.user.seasonWins.length > 1 ? `×${entry.user.seasonWins.length}` : `S${entry.user.seasonWins[0]}`}
-                </span>
-              )} */}
+      {entries.map((entry, index) => {
+        const pw = perfectWinsMap.get(entry.user.id) || 0
+        return (
+          <div
+            key={entry.user.id}
+            onClick={() => navigate(`/player/${entry.user.id}`)}
+            className="flex items-center gap-2 p-3 rounded-xl border border-transparent hover:border-background-lighter transition-all duration-200 cursor-pointer active:scale-[0.99] bg-background-light"
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
+            {/* Rank */}
+            <div className="w-9 flex-shrink-0">
+              <RankBadge rank={entry.rank} isProvisional={entry.isProvisional} isInactive={entry.isInactive} />
             </div>
-            <div className="text-xs text-yellow-400">
-              {getRatingTier(entry.user.eloRating)}
-            </div>
-          </div>
 
-          {/* Stats column */}
-          <div className="flex-shrink-0 text-center px-2">
-            <div className="text-xs">
-              <span className="text-success">{entry.wins}W</span>
-              {' '}
-              <span className="text-error">{entry.losses}L</span>
+            {/* Player info */}
+            <div className="flex-1 min-w-0">
+              <div className={`font-semibold truncate flex items-center gap-1.5 ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
+                {entry.user.displayName}
+                {pw > 0 && (
+                  <span
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold flex-shrink-0"
+                    title={`${pw} unique opponent${pw > 1 ? 's' : ''} beaten 11-0`}
+                  >
+                    11-0{pw > 1 ? ` ×${pw}` : ''}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-yellow-400">
+                {getRatingTier(entry.user.eloRating)}
+              </div>
             </div>
-          </div>
 
-          {/* ELO */}
-          <div className="flex-shrink-0 w-14 text-right">
-            <div className="font-display font-bold text-lg text-white">
-              {entry.user.eloRating}
+            {/* Stats column */}
+            <div className="flex-shrink-0 text-center px-2">
+              <div className="text-xs">
+                <span className="text-success">{entry.wins}W</span>
+                {' '}
+                <span className="text-error">{entry.losses}L</span>
+              </div>
             </div>
-          </div>
 
-          {/* Delete button */}
-          {onDeletePlayer && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onDeletePlayer(entry.user.id, entry.user.displayName)
-              }}
-              className="flex-shrink-0 p-2 text-gray-500 hover:text-error hover:bg-error/10 rounded-lg transition-colors"
-              title="Delete player"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          )}
-        </div>
-      ))}
+            {/* ELO */}
+            <div className="flex-shrink-0 w-14 text-right">
+              <div className="font-display font-bold text-lg text-white">
+                {entry.user.eloRating}
+              </div>
+            </div>
+
+            {/* Delete button */}
+            {onDeletePlayer && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeletePlayer(entry.user.id, entry.user.displayName)
+                }}
+                className="flex-shrink-0 p-2 text-gray-500 hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+                title="Delete player"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

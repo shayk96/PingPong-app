@@ -10,6 +10,8 @@ export interface RoomMatch {
     scoreB: number
     winnerId: string
     loserId: string
+    winnerEloDelta?: number
+    loserEloDelta?: number
   }
 }
 

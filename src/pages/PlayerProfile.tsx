@@ -128,12 +128,21 @@ export default function PlayerProfile() {
     return Math.round((totalMargin / wins.length) * 10) / 10
   }, [playerMatches])
 
-  // Average lucky points per game
+  // Average lucky points per game — only count games since lucky tracking began
   const avgLucky = useMemo(() => {
     if (playerMatches.length === 0) return 0
-    const totalLucky = playerMatches.reduce((sum, m) => sum + m.playerLucky, 0)
-    return Math.round((totalLucky / playerMatches.length) * 10) / 10
-  }, [playerMatches])
+    // Find earliest match (any player) with lucky points
+    const allSorted = [...matches].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    const firstLucky = allSorted.find(m =>
+      (m.playerALuckyPoints || 0) > 0 || (m.playerBLuckyPoints || 0) > 0
+    )
+    if (!firstLucky) return 0
+    const luckyStart = firstLucky.createdAt.getTime()
+    const relevant = playerMatches.filter(m => m.createdAt.getTime() >= luckyStart)
+    if (relevant.length === 0) return 0
+    const totalLucky = relevant.reduce((sum, m) => sum + m.playerLucky, 0)
+    return Math.round((totalLucky / relevant.length) * 100) / 100
+  }, [playerMatches, matches])
 
   // 11-0 wins — count unique opponents beaten 11-0
   const perfectWins = useMemo(() => {

@@ -2,7 +2,9 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
+import { useLeaderboard } from '../hooks/useStats'
 import { validateMatch } from '../lib/validation'
+import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { Button, ToastContainer, useToast } from '../components/ui'
 import type { User, NewMatchInput } from '../types'
 import {
@@ -25,8 +27,11 @@ type Phase = 'setup' | 'playing' | 'round-complete'
 export default function RoomSession() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, refresh: refreshPlayers } = usePlayers()
-  const { createMatch, undoMatch } = useMatches()
+  const { matches: globalMatches, createMatch, undoMatch } = useMatches()
+  const leaderboard = useLeaderboard(players, globalMatches)
   const { toasts, showToast, removeToast } = useToast()
+
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
 
   // Setup phase
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -217,7 +222,14 @@ export default function RoomSession() {
       updated[currentMatchIndex] = {
         ...updated[currentMatchIndex],
         status: 'done',
-        result: { scoreA: pAScore, scoreB: pBScore, winnerId, loserId },
+        result: {
+          scoreA: pAScore,
+          scoreB: pBScore,
+          winnerId,
+          loserId,
+          winnerEloDelta: result?.winnerEloDelta,
+          loserEloDelta: result?.loserEloDelta,
+        },
       }
 
       const newPairs = addPlayedPair(playedPairs, match.playerA.id, match.playerB.id)
@@ -797,6 +809,22 @@ export default function RoomSession() {
             </div>
           )}
 
+          {/* Main Leaderboard Table (collapsible) */}
+          <button
+            onClick={() => setShowLeaderboard(prev => !prev)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-background-light border border-background-lighter text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            <span className="font-medium">Leaderboard</span>
+            <svg className={`w-4 h-4 transition-transform ${showLeaderboard ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showLeaderboard && (
+            <div className="max-h-80 overflow-y-auto">
+              <LeaderboardTable entries={leaderboard} matches={globalMatches} />
+            </div>
+          )}
+
           {/* Live Standings */}
           {completedCount > 0 && (
             <div className="bg-background-light rounded-xl p-3 border border-background-lighter">
@@ -1004,6 +1032,7 @@ export default function RoomSession() {
                     )
                   }
 
+                  const eloDelta = m.result!.winnerEloDelta
                   return (
                     <div
                       key={m.id}
@@ -1022,6 +1051,11 @@ export default function RoomSession() {
                         <span className="text-sm font-bold text-white">
                           {m.result!.scoreA}–{m.result!.scoreB}
                         </span>
+                        {eloDelta != null && (
+                          <span className="text-[10px] text-gray-500 font-medium w-8 text-right">
+                            ±{Math.abs(Math.round(eloDelta))}
+                          </span>
+                        )}
                         <button
                           onClick={() => startEditGame(idx)}
                           className="text-gray-600 hover:text-blue-400 active:text-blue-400 transition-all p-1"
@@ -1116,6 +1150,7 @@ export default function RoomSession() {
                   )
                 }
 
+                const eloDelta = m.result!.winnerEloDelta
                 return (
                   <div
                     key={m.id}
@@ -1134,6 +1169,11 @@ export default function RoomSession() {
                       <span className="text-sm font-bold text-white">
                         {m.result!.scoreA}–{m.result!.scoreB}
                       </span>
+                      {eloDelta != null && (
+                        <span className="text-[10px] text-gray-500 font-medium w-8 text-right">
+                          ±{Math.abs(Math.round(eloDelta))}
+                        </span>
+                      )}
                       <button
                         onClick={() => startEditGame(idx)}
                         className="text-gray-600 hover:text-blue-400 active:text-blue-400 transition-all p-1"

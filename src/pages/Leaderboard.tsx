@@ -20,7 +20,7 @@ export default function Leaderboard() {
   const { players, loading: playersLoading, addPlayer, deletePlayer, refresh: refreshPlayers } = usePlayers()
   const { matches, loading: matchesLoading, deleteMatch, undoMatch, refresh: refreshMatches } = useMatches()
   const { currentSeason, pastSeasons, loading: seasonLoading, refresh: refreshSeason } = useSeason()
-  const [showInactivePlayers, setShowInactivePlayers] = useState(true) // default to showing all players
+  const [showInactivePlayers, setShowInactivePlayers] = useState(false)
   const leaderboard = useLeaderboard(players, matches, showInactivePlayers)
   const recentMatches = useRecentMatchesWithPlayers(matches, players, 10)
   const inactiveCount = useMemo(() => players.filter(p => isPlayerInactive(p.lastPlayedAt)).length, [players])
@@ -160,12 +160,24 @@ export default function Leaderboard() {
     return oldest.createdAt
   }, [matches, currentSeason])
 
-  // Lucky points leaderboard data
+  // Lucky points leaderboard data — only count games since lucky tracking began
   const luckyLeaderboard = useMemo(() => {
+    // Find the earliest match with any lucky points to determine feature start date
+    const sortedByDate = [...matches].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    const firstLuckyMatch = sortedByDate.find(m =>
+      (m.playerALuckyPoints || 0) > 0 || (m.playerBLuckyPoints || 0) > 0
+    )
+    if (!firstLuckyMatch) {
+      return []
+    }
+    const luckyStartDate = firstLuckyMatch.createdAt
+
     const playerLucky: Record<string, { name: string; total: number; games: number }> = {}
-    for (const m of matches) {
-      const aLucky = (m as any).playerALuckyPoints || 0
-      const bLucky = (m as any).playerBLuckyPoints || 0
+    // Only count matches from when lucky tracking began
+    const relevantMatches = matches.filter(m => m.createdAt.getTime() >= luckyStartDate.getTime())
+    for (const m of relevantMatches) {
+      const aLucky = m.playerALuckyPoints || 0
+      const bLucky = m.playerBLuckyPoints || 0
       if (!playerLucky[m.playerAId]) {
         const p = players.find(pl => pl.id === m.playerAId)
         playerLucky[m.playerAId] = { name: p?.displayName || 'Unknown', total: 0, games: 0 }
@@ -185,7 +197,7 @@ export default function Leaderboard() {
         name: data.name,
         totalLucky: data.total,
         games: data.games,
-        avgLucky: data.games > 0 ? Math.round((data.total / data.games) * 10) / 10 : 0,
+        avgLucky: data.games > 0 ? Math.round((data.total / data.games) * 100) / 100 : 0,
       }))
       .filter(e => e.totalLucky > 0)
       .sort((a, b) => b.avgLucky - a.avgLucky)
@@ -482,9 +494,9 @@ export default function Leaderboard() {
           <LeaderboardTable 
             entries={leaderboard} 
             onDeletePlayer={handleDeletePlayerClick}
+            matches={matches}
           />
-          {/* PAUSED: inactive toggle hidden — all players shown by default */}
-          {/* inactiveCount > 0 && (
+          {inactiveCount > 0 && (
             <button
               type="button"
               onClick={() => setShowInactivePlayers(prev => !prev)}
@@ -495,7 +507,7 @@ export default function Leaderboard() {
                 : `Show inactive players (${inactiveCount})`
               }
             </button>
-          ) */}
+          )}
         </section>
       )}
 
