@@ -51,14 +51,22 @@ interface EloGraphModalProps {
   isOpen: boolean
   onClose: () => void
   players: User[]
+  initialPlayerIds?: string[]
 }
 
-export function EloGraphModal({ isOpen, onClose, players }: EloGraphModalProps) {
+export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: EloGraphModalProps) {
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([])
   const [eloHistory, setEloHistory] = useState<EloHistoryEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [playerSearch, setPlayerSearch] = useState('')
   const chartRef = useRef<any>(null)
+
+  // Pre-select players when modal opens
+  useEffect(() => {
+    if (isOpen && initialPlayerIds && initialPlayerIds.length > 0) {
+      setSelectedPlayerIds(initialPlayerIds)
+    }
+  }, [isOpen, initialPlayerIds])
 
   const sortedPlayers = useMemo(
     () => [...players].sort((a, b) => a.displayName.localeCompare(b.displayName)),

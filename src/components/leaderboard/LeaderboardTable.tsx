@@ -54,10 +54,13 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
                 {entry.user.displayName}
                 {pw > 0 && (
                   <span
-                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold flex-shrink-0"
+                    className="relative inline-flex items-center justify-center flex-shrink-0"
                     title={`${pw} total 11-0 win${pw > 1 ? 's' : ''}`}
                   >
-                    11-0 ×{pw}
+                    <svg className="w-6 h-6 text-accent drop-shadow-[0_0_3px_rgba(249,115,22,0.4)]" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    </svg>
+                    <span className="absolute text-[9px] font-bold text-white" style={{ top: '6px' }}>{pw}</span>
                   </span>
                 )}
               </div>

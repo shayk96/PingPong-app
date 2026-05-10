@@ -26,6 +26,7 @@ import { usePlayerStats, useLeaderboard } from '../hooks/useStats'
 import { fetchEloHistory, EloHistoryEntry, renamePlayer } from '../lib/api'
 import { getRatingTier, formatEloDelta } from '../lib/elo'
 import { Button } from '../components/ui'
+import { EloGraphModal } from '../components/graph/EloGraphModal'
 
 // Register Chart.js components
 ChartJS.register(
@@ -52,6 +53,7 @@ export default function PlayerProfile() {
   const [editName, setEditName] = useState('')
   const [editError, setEditError] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const [showCompareModal, setShowCompareModal] = useState(false)
   const editInputRef = useRef<HTMLInputElement>(null)
   const chartRef = useRef<any>(null)
 
@@ -144,14 +146,15 @@ export default function PlayerProfile() {
     return Math.round((totalLucky / relevant.length) * 100) / 100
   }, [playerMatches, matches])
 
-  // 11-0 wins — count unique opponents beaten 11-0
-  const perfectWins = useMemo(() => {
-    const opponents = new Set(
-      playerMatches
-        .filter(m => m.isWin && m.playerScore === 11 && m.opponentScore === 0)
-        .map(m => m.opponent?.id)
-    )
-    return opponents.size
+  // 11-0 wins — detailed list with opponent + date
+  const perfectWinsList = useMemo(() => {
+    return playerMatches
+      .filter(m => m.isWin && m.playerScore === 11 && m.opponentScore === 0)
+      .map(m => ({
+        opponentName: m.opponent?.displayName || 'Unknown',
+        date: m.createdAt,
+      }))
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
   }, [playerMatches])
 
   const startEditing = () => {
@@ -450,10 +453,27 @@ export default function PlayerProfile() {
       </div>
 
       {/* Perfect wins (11-0) */}
-      {perfectWins > 0 && (
-        <div className="mb-4 bg-background-light rounded-xl p-3 border border-accent/20 flex items-center justify-between">
-          <span className="text-sm text-gray-300">11-0 Wins</span>
-          <span className="text-xl font-display font-bold text-accent">{perfectWins}</span>
+      {perfectWinsList.length > 0 && (
+        <div className="mb-4 bg-background-light rounded-xl p-3 border border-accent/20">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+              <span className="text-sm font-semibold text-white">11-0 Wins</span>
+            </div>
+            <span className="text-lg font-display font-bold text-accent">{perfectWinsList.length}</span>
+          </div>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            {perfectWinsList.map((w, i) => (
+              <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-background/60">
+                <span className="text-sm text-gray-200 font-medium">vs {w.opponentName}</span>
+                <span className="text-xs text-gray-500">
+                  {w.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -483,7 +503,18 @@ export default function PlayerProfile() {
 
       {/* ELO Graph */}
       <section className="mb-4">
-        <h2 className="text-lg font-semibold text-white mb-3">ELO History</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-white">ELO History</h2>
+          <button
+            onClick={() => setShowCompareModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background-light border border-background-lighter text-gray-400 text-xs font-medium hover:text-white hover:border-accent/40 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Compare
+          </button>
+        </div>
         <div className="bg-background-light rounded-2xl p-4 border border-background-lighter">
           <div className="h-52">
             {eloLoading ? (
@@ -603,6 +634,14 @@ export default function PlayerProfile() {
           )}
         </div>
       </section>
+
+      {/* Compare ELO Graph Modal */}
+      <EloGraphModal
+        isOpen={showCompareModal}
+        onClose={() => setShowCompareModal(false)}
+        players={players}
+        initialPlayerIds={id ? [id] : []}
+      />
     </div>
   )
 }
