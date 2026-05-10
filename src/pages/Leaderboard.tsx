@@ -23,7 +23,7 @@ export default function Leaderboard() {
   const [showInactivePlayers, setShowInactivePlayers] = useState(false)
   const leaderboard = useLeaderboard(players, matches, showInactivePlayers)
   const recentMatches = useRecentMatchesWithPlayers(matches, players, 10)
-  const inactiveCount = useMemo(() => players.filter(p => isPlayerInactive(p.lastPlayedAt)).length, [players])
+  const inactiveCount = useMemo(() => players.filter(p => isPlayerInactive(p.lastPlayedAt, (p.wins || 0) + (p.losses || 0))).length, [players])
   const { toasts, showToast, removeToast } = useToast()
   
   // Add player modal state

@@ -12,21 +12,15 @@ interface LeaderboardTableProps {
 export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: LeaderboardTableProps) {
   const navigate = useNavigate()
 
-  // Compute 11-0 unique opponent count per player
+  // Count total 11-0 wins per player
   const perfectWinsMap = useMemo(() => {
     const map = new Map<string, number>()
     if (matches.length === 0) return map
-    const playerOpps = new Map<string, Set<string>>()
     for (const m of matches) {
-      if (m.playerAScore === 11 && m.playerBScore === 0) {
-        if (!playerOpps.has(m.winnerId)) playerOpps.set(m.winnerId, new Set())
-        playerOpps.get(m.winnerId)!.add(m.loserId)
-      } else if (m.playerBScore === 11 && m.playerAScore === 0) {
-        if (!playerOpps.has(m.winnerId)) playerOpps.set(m.winnerId, new Set())
-        playerOpps.get(m.winnerId)!.add(m.loserId)
+      if ((m.playerAScore === 11 && m.playerBScore === 0) || (m.playerBScore === 11 && m.playerAScore === 0)) {
+        map.set(m.winnerId, (map.get(m.winnerId) || 0) + 1)
       }
     }
-    playerOpps.forEach((opps, pid) => map.set(pid, opps.size))
     return map
   }, [matches])
 
@@ -61,9 +55,9 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
                 {pw > 0 && (
                   <span
                     className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold flex-shrink-0"
-                    title={`${pw} unique opponent${pw > 1 ? 's' : ''} beaten 11-0`}
+                    title={`${pw} total 11-0 win${pw > 1 ? 's' : ''}`}
                   >
-                    11-0{pw > 1 ? ` ×${pw}` : ''}
+                    11-0 ×{pw}
                   </span>
                 )}
               </div>

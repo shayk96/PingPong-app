@@ -103,8 +103,12 @@ const INACTIVITY_GRACE_DAYS = 14
 /**
  * Check if player is inactive (hasn't played in more than grace period)
  */
-export function isPlayerInactive(lastPlayedAt: Date | undefined): boolean {
-  if (!lastPlayedAt) return false
+export function isPlayerInactive(lastPlayedAt: Date | undefined, totalGames?: number): boolean {
+  if (!lastPlayedAt) {
+    // Players who have never played are not considered inactive (they're just new)
+    // But players with games and no lastPlayedAt are treated as inactive
+    return (totalGames ?? 0) > 0
+  }
   
   const now = new Date()
   const daysSinceLastPlayed = Math.floor((now.getTime() - new Date(lastPlayedAt).getTime()) / (1000 * 60 * 60 * 24))
@@ -126,17 +130,10 @@ export function useLeaderboard(
   return useMemo(() => {
     const playersToRank = includeInactive
       ? [...players]
-      : players.filter(p => !isPlayerInactive(p.lastPlayedAt))
-
-    // PAUSED: bucket sorting disabled — all players sorted purely by ELO
-    // To restore: uncomment the bucket logic below and remove the simple sort
-    // const establishedPlayers = playersToRank.filter(p => (p.wins + p.losses) >= MIN_GAMES_FOR_RANKING && !isPlayerInactive(p.lastPlayedAt))
-    // const provisionalPlayers = playersToRank.filter(p => (p.wins + p.losses) < MIN_GAMES_FOR_RANKING && !isPlayerInactive(p.lastPlayedAt))
-    // const inactivePlayers = includeInactive ? playersToRank.filter(p => isPlayerInactive(p.lastPlayedAt)) : []
-    // establishedPlayers.sort((a, b) => b.eloRating - a.eloRating)
-    // provisionalPlayers.sort((a, b) => b.eloRating - a.eloRating)
-    // inactivePlayers.sort((a, b) => b.eloRating - a.eloRating)
-    // const sortedPlayers = [...establishedPlayers, ...provisionalPlayers, ...inactivePlayers]
+      : players.filter(p => {
+          const total = (p.wins || 0) + (p.losses || 0)
+          return !isPlayerInactive(p.lastPlayedAt, total)
+        })
 
     const sortedPlayers = [...playersToRank].sort((a, b) => b.eloRating - a.eloRating)
 
@@ -148,7 +145,7 @@ export function useLeaderboard(
     const leaderboard: LeaderboardEntry[] = sortedPlayers.map((user, index) => {
       const totalGames = (user.wins || 0) + (user.losses || 0)
       const isProvisional = totalGames < MIN_GAMES_FOR_RANKING
-      const inactive = isPlayerInactive(user.lastPlayedAt)
+      const inactive = isPlayerInactive(user.lastPlayedAt, totalGames)
 
       let rankChange = 0
       if (lastMatch) {
