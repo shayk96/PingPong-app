@@ -170,6 +170,23 @@ export async function endSeason(password: string): Promise<{
   return res.json()
 }
 
+// ============ Room Session ============
+
+export async function fetchActiveRoom(): Promise<Record<string, unknown> | null> {
+  const res = await fetch(`${API_URL}/room`)
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function saveRoom(data: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${API_URL}/room`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error('Failed to save room')
+}
+
 // ============ Health Check ============
 
 export async function checkHealth() {

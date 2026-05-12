@@ -6,6 +6,7 @@ import { useLeaderboard } from '../hooks/useStats'
 import { validateMatch } from '../lib/validation'
 import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { Button, ToastContainer, useToast } from '../components/ui'
+import { saveRoom as apiSaveRoom, fetchActiveRoom as apiFetchActiveRoom } from '../lib/api'
 import type { User, NewMatchInput } from '../types'
 import {
   RoomMatch,
@@ -32,6 +33,8 @@ export default function RoomSession() {
   const { toasts, showToast, removeToast } = useToast()
 
   const [showLeaderboard, setShowLeaderboard] = useState(false)
+  const [isHost, setIsHost] = useState(false)
+  const [isViewer, setIsViewer] = useState(false)
 
   // Setup phase
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -114,6 +117,137 @@ export default function RoomSession() {
     })
   }
 
+  // Sync ELO ratings from global players into roomPlayers and current matches
+  useEffect(() => {
+    if (phase === 'setup' || players.length === 0 || roomPlayers.length === 0) return
+    const playerMap = new Map(players.map(p => [p.id, p]))
+
+    setRoomPlayers(prev => prev.map(rp => {
+      const fresh = playerMap.get(rp.id)
+      return fresh ? { ...rp, eloRating: fresh.eloRating, wins: fresh.wins, losses: fresh.losses } : rp
+    }))
+
+    setAllSessionPlayers(prev => prev.map(sp => {
+      const fresh = playerMap.get(sp.id)
+      return fresh ? { ...sp, eloRating: fresh.eloRating, wins: fresh.wins, losses: fresh.losses } : sp
+    }))
+
+    setMatches(prev => prev.map(m => {
+      const freshA = playerMap.get(m.playerA.id)
+      const freshB = playerMap.get(m.playerB.id)
+      return {
+        ...m,
+        playerA: freshA ? { ...m.playerA, eloRating: freshA.eloRating } : m.playerA,
+        playerB: freshB ? { ...m.playerB, eloRating: freshB.eloRating } : m.playerB,
+      }
+    }))
+  }, [players])
+
+  // Serialize room state for backend sync
+  const serializeRoom = useCallback(() => ({
+    phase,
+    roomPlayerIds: roomPlayers.map(p => p.id),
+    allSessionPlayerIds: allSessionPlayers.map(p => p.id),
+    mode,
+    matches: matches.map(m => ({
+      id: m.id,
+      playerAId: m.playerA.id,
+      playerBId: m.playerB.id,
+      status: m.status,
+      result: m.result || null,
+    })),
+    currentMatchIndex,
+    roundNumber,
+    playedPairs: Array.from(playedPairs),
+    gamesPlayedCount: Object.fromEntries(gamesPlayedCount),
+    pastRounds: pastRounds.map(r => ({
+      roundNumber: r.roundNumber,
+      matches: r.matches.map(m => ({
+        id: m.id,
+        playerAId: m.playerA.id,
+        playerBId: m.playerB.id,
+        status: m.status,
+        result: m.result || null,
+      })),
+    })),
+    oddMatchAdded,
+  }), [phase, roomPlayers, allSessionPlayers, mode, matches, currentMatchIndex, roundNumber, playedPairs, gamesPlayedCount, pastRounds, oddMatchAdded])
+
+  // Sync room state to backend (host only)
+  const syncRoomToBackend = useCallback(async () => {
+    if (!isHost || isViewer) return
+    try {
+      await apiSaveRoom(serializeRoom())
+    } catch {
+      // Silent fail — room sync is best-effort
+    }
+  }, [isHost, isViewer, serializeRoom])
+
+  // Auto-sync to backend when room state changes (host only)
+  useEffect(() => {
+    if (!isHost || isViewer || phase === 'setup') return
+    syncRoomToBackend()
+  }, [matches, phase, roomPlayers, currentMatchIndex, roundNumber, pastRounds])
+
+  // Deserialize room from backend data
+  const loadRoomFromBackend = useCallback((data: Record<string, unknown>) => {
+    const playerMap = new Map(players.map(p => [p.id, p]))
+    const resolvePlayer = (id: string) => playerMap.get(id) || { id, displayName: '?', eloRating: 800, wins: 0, losses: 0, createdAt: new Date() } as User
+    const resolveMatch = (m: any): RoomMatch => ({
+      id: m.id,
+      playerA: resolvePlayer(m.playerAId),
+      playerB: resolvePlayer(m.playerBId),
+      status: m.status,
+      result: m.result || undefined,
+    })
+
+    const rPlayerIds = (data.roomPlayerIds as string[]) || []
+    const allPlayerIds = (data.allSessionPlayerIds as string[]) || []
+    setRoomPlayers(rPlayerIds.map(resolvePlayer))
+    setAllSessionPlayers(allPlayerIds.map(resolvePlayer))
+    setMode((data.mode as RoomMode) || '3-player')
+    setMatches(((data.matches as any[]) || []).map(resolveMatch))
+    setCurrentMatchIndex((data.currentMatchIndex as number) || 0)
+    setRoundNumber((data.roundNumber as number) || 1)
+    setPlayedPairs(new Set((data.playedPairs as string[]) || []))
+    setGamesPlayedCount(new Map(Object.entries((data.gamesPlayedCount as Record<string, number>) || {})))
+    setOddMatchAdded((data.oddMatchAdded as boolean) || false)
+    setPastRounds(((data.pastRounds as any[]) || []).map((r: any) => ({
+      roundNumber: r.roundNumber,
+      matches: (r.matches || []).map(resolveMatch),
+    })))
+    setPhase((data.phase as Phase) || 'playing')
+  }, [players])
+
+  // On load, check for an active room — if one exists and we're not the host, become a viewer
+  useEffect(() => {
+    if (players.length === 0 || isHost) return
+    apiFetchActiveRoom().then(data => {
+      if (data && (data.phase === 'playing' || data.phase === 'round-complete')) {
+        setIsViewer(true)
+        loadRoomFromBackend(data)
+      }
+    }).catch(() => { /* no active room */ })
+  }, [players, isHost])
+
+  // Poll for updates (viewer mode)
+  useEffect(() => {
+    if (!isViewer || players.length === 0) return
+    const interval = setInterval(async () => {
+      try {
+        const data = await apiFetchActiveRoom()
+        if (data) {
+          loadRoomFromBackend(data)
+          if (data.phase === 'ended') {
+            setIsViewer(false)
+            setPhase('setup')
+          }
+        }
+      } catch { /* silent */ }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [isViewer, loadRoomFromBackend, players])
+
   // Focus first score input when match changes
   useEffect(() => {
     if (phase === 'playing') {
@@ -121,7 +255,7 @@ export default function RoomSession() {
     }
   }, [currentMatchIndex, phase])
 
-  const startSession = () => {
+  const startSession = async () => {
     const selected = players.filter(p => selectedIds.has(p.id))
     if (selected.length < 3) {
       showToast('Select at least 3 players', 'error')
@@ -153,6 +287,9 @@ export default function RoomSession() {
       roundMatches[0].status = 'playing'
       setMatches([...roundMatches])
     }
+
+    setIsHost(true)
+    setIsViewer(false)
   }
 
   const generateRound = (
@@ -667,6 +804,9 @@ export default function RoomSession() {
   }
 
   const endSession = async () => {
+    if (isHost) {
+      try { await apiSaveRoom({ phase: 'ended' }) } catch { /* silent */ }
+    }
     await refreshPlayers()
     navigate('/leaderboard')
   }
@@ -705,10 +845,13 @@ export default function RoomSession() {
             Round {roundNumber} &middot; {roomPlayers.length} players &middot; {mode === '3-player' ? '3-player' : mode === '4-player' ? '4-player' : `${roomPlayers.length}-player`}
           </p>
         )}
+        {isViewer && (
+          <p className="text-xs text-accent mt-1">Viewing live — scores are entered on the host device</p>
+        )}
       </header>
 
       {/* === SETUP PHASE === */}
-      {phase === 'setup' && (
+      {phase === 'setup' && !isViewer && (
         <div className="space-y-4">
           <div className="bg-background-light rounded-2xl p-4 border border-background-lighter">
             <div className="flex items-center justify-between mb-3">

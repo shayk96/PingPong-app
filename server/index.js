@@ -103,10 +103,26 @@ const seasonSchema = new mongoose.Schema({
   }]
 })
 
+const roomSchema = new mongoose.Schema({
+  phase: { type: String, default: 'setup' },
+  roomPlayerIds: [String],
+  allSessionPlayerIds: [String],
+  mode: { type: String, default: '3-player' },
+  matches: { type: mongoose.Schema.Types.Mixed, default: [] },
+  currentMatchIndex: { type: Number, default: 0 },
+  roundNumber: { type: Number, default: 1 },
+  playedPairs: [String],
+  gamesPlayedCount: { type: mongoose.Schema.Types.Mixed, default: {} },
+  pastRounds: { type: mongoose.Schema.Types.Mixed, default: [] },
+  oddMatchAdded: { type: Boolean, default: false },
+  updatedAt: { type: Date, default: Date.now },
+})
+
 const User = mongoose.model('User', userSchema)
 const Match = mongoose.model('Match', matchSchema)
 const EloHistory = mongoose.model('EloHistory', eloHistorySchema)
 const Season = mongoose.model('Season', seasonSchema)
+const Room = mongoose.model('Room', roomSchema)
 
 // Generate unique ID
 function generateId() {
@@ -798,6 +814,32 @@ app.post('/api/seasons/end', async (req, res) => {
   } catch (err) {
     console.error('Error ending season:', err.message)
     res.status(500).json({ error: 'Failed to end season' })
+  }
+})
+
+// ============ Room Session Endpoints ============
+
+// Get the active room
+app.get('/api/room', async (req, res) => {
+  try {
+    const room = await Room.findOne({ phase: { $ne: 'ended' } }).sort({ updatedAt: -1 })
+    res.json(room || null)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch room' })
+  }
+})
+
+// Save/update the active room (upsert — only one room at a time)
+app.put('/api/room', async (req, res) => {
+  try {
+    const room = await Room.findOneAndUpdate(
+      { phase: { $ne: 'ended' } },
+      { ...req.body, updatedAt: new Date() },
+      { new: true, upsert: true }
+    )
+    res.json(room)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save room' })
   }
 })
 

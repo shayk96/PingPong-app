@@ -69,8 +69,7 @@ export function resolve3PlayerMatch(
 // Match 1: C vs D
 // Match 2: Winner(0) vs Winner(1)
 // Match 3: Loser(0) vs Loser(1)
-// Match 4: 2-win player vs winner of match 3
-// Match 5: remaining two
+// Match 4 & 5: The two pairings that haven't played yet (max variety)
 export function generate4PlayerRound(players: User[]): RoomMatch[] {
   const [a, b, c, d] = players
   const placeholder = players[0] // will be overwritten
@@ -104,12 +103,50 @@ export function resolve4PlayerMatch(
   }
 
   if (completedIndex <= 3 && updated[2].status === 'done' && updated[3].status === 'done') {
-    const twoWinPlayer = getWinner(updated[2]) // won match 0 or 1, then won match 2
-    const winnerOfLosers = getWinner(updated[3])
-    const loserOfWinners = getLoser(updated[2])
-    const twoLossPlayer = getLoser(updated[3])
-    updated[4] = { ...updated[4], playerA: twoWinPlayer, playerB: winnerOfLosers }
-    updated[5] = { ...updated[5], playerA: loserOfWinners, playerB: twoLossPlayer }
+    // Collect all 4 players and which pairs already played (matches 0-3)
+    const allPlayers = [
+      updated[0].playerA, updated[0].playerB,
+      updated[1].playerA, updated[1].playerB,
+    ]
+    const uniqueById = new Map(allPlayers.map(p => [p.id, p]))
+    const players4 = Array.from(uniqueById.values())
+
+    const playedKeys = new Set<string>()
+    for (let i = 0; i <= 3; i++) {
+      if (updated[i].status === 'done') {
+        playedKeys.add([updated[i].playerA.id, updated[i].playerB.id].sort().join(':'))
+      }
+    }
+
+    // Find the two pairings that haven't played yet
+    const unplayed: [typeof players4[0], typeof players4[0]][] = []
+    for (let i = 0; i < players4.length; i++) {
+      for (let j = i + 1; j < players4.length; j++) {
+        const key = [players4[i].id, players4[j].id].sort().join(':')
+        if (!playedKeys.has(key)) {
+          unplayed.push([players4[i], players4[j]])
+        }
+      }
+    }
+
+    if (unplayed.length >= 2) {
+      updated[4] = { ...updated[4], playerA: unplayed[0][0], playerB: unplayed[0][1] }
+      updated[5] = { ...updated[5], playerA: unplayed[1][0], playerB: unplayed[1][1] }
+    } else if (unplayed.length === 1) {
+      updated[4] = { ...updated[4], playerA: unplayed[0][0], playerB: unplayed[0][1] }
+      // Fallback for match 5
+      const twoWinPlayer = getWinner(updated[2])
+      const twoLossPlayer = getLoser(updated[3])
+      updated[5] = { ...updated[5], playerA: twoWinPlayer, playerB: twoLossPlayer }
+    } else {
+      // All pairs played — use 2-win vs 2-loss, remaining two
+      const twoWinPlayer = getWinner(updated[2])
+      const twoLossPlayer = getLoser(updated[3])
+      const loserOfWinners = getLoser(updated[2])
+      const winnerOfLosers = getWinner(updated[3])
+      updated[4] = { ...updated[4], playerA: twoWinPlayer, playerB: twoLossPlayer }
+      updated[5] = { ...updated[5], playerA: loserOfWinners, playerB: winnerOfLosers }
+    }
   }
 
   return updated
