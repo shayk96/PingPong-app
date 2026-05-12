@@ -76,6 +76,13 @@ export default function RoomSession() {
   // Track backend match IDs so we can undo them
   const [matchBackendIds, setMatchBackendIds] = useState<Map<number, string>>(new Map())
 
+  // Round history — stores completed rounds for viewing
+  const [pastRounds, setPastRounds] = useState<{ roundNumber: number; matches: RoomMatch[] }[]>([])
+  const [showPastRounds, setShowPastRounds] = useState(false)
+
+  // All players who ever participated in this session (survives removal)
+  const [allSessionPlayers, setAllSessionPlayers] = useState<User[]>([])
+
   const sortedPlayers = useMemo(
     () => [...players].sort((a, b) => a.displayName.localeCompare(b.displayName)),
     [players]
@@ -124,12 +131,14 @@ export default function RoomSession() {
     const shuffled = shufflePlayers(selected)
     const m = getRoomMode(shuffled.length)
     setRoomPlayers(shuffled)
+    setAllSessionPlayers(shuffled)
     setMode(m)
     setRoundNumber(1)
     setPlayedPairs(new Set())
     setGamesPlayedCount(new Map())
     setOddMatchAdded(false)
     setMatchBackendIds(new Map())
+    setPastRounds([])
 
     const roundMatches = generateRound(shuffled, m, new Set(), new Map())
     setMatches(roundMatches)
@@ -277,6 +286,10 @@ export default function RoomSession() {
   const handleAddPlayer = (player: User, putInNextGame: boolean) => {
     const newRoomPlayers = [...roomPlayers, player]
     setRoomPlayers(newRoomPlayers)
+    // Track in all-session list
+    setAllSessionPlayers(prev =>
+      prev.some(p => p.id === player.id) ? prev : [...prev, player]
+    )
 
     const newMode = getRoomMode(newRoomPlayers.length)
     setMode(newMode)
@@ -290,14 +303,6 @@ export default function RoomSession() {
       if (curMatch && curMatch.status === 'playing') {
         currentlyPlayingIds.add(curMatch.playerA.id)
         currentlyPlayingIds.add(curMatch.playerB.id)
-      }
-
-      // Also check the match right after insertion point to avoid back-to-back
-      const nextPending = matches.find((m, i) => i > currentMatchIndex && m.status === 'pending')
-      const nextPendingIds = new Set<string>()
-      if (nextPending) {
-        nextPendingIds.add(nextPending.playerA.id)
-        nextPendingIds.add(nextPending.playerB.id)
       }
 
       // Find partner: least games played, not currently playing, not a repeat pairing if possible
@@ -327,6 +332,14 @@ export default function RoomSession() {
       if (!partner) partner = fallbackPartner
       if (!partner) partner = roomPlayers[0]
 
+      // Remove any pending matches involving the chosen partner
+      // (they're now playing the new player instead)
+      let updated = matches.map(m => ({ ...m }))
+      updated = updated.filter(m =>
+        m.status === 'done' || m.status === 'playing' ||
+        (m.playerA.id !== partner!.id && m.playerB.id !== partner!.id)
+      )
+
       const newMatch: RoomMatch = {
         id: nextId,
         playerA: player,
@@ -334,9 +347,12 @@ export default function RoomSession() {
         status: 'pending',
       }
 
-      const updated = [...matches]
-      const insertAt = currentMatchIndex + 1
-      updated.splice(insertAt, 0, newMatch)
+      const insertAt = updated.findIndex((m, i) => i > currentMatchIndex && m.status === 'pending')
+      if (insertAt === -1) {
+        updated.push(newMatch)
+      } else {
+        updated.splice(insertAt, 0, newMatch)
+      }
       setMatches(updated)
     }
 
@@ -541,29 +557,39 @@ export default function RoomSession() {
     showToast(`Manual game added: ${pA.displayName} vs ${pB.displayName}`, 'success')
   }
 
-  // --- Skip current game ---
+  // --- Skip current game (remove entirely, give skipped players priority) ---
   const handleSkipGame = () => {
     const updated = matches.map(m => ({ ...m }))
     const current = updated[currentMatchIndex]
     if (!current || current.status !== 'playing') return
 
-    // Move current match to end of pending list
-    updated.splice(currentMatchIndex, 1)
-    current.status = 'pending'
-    updated.push(current)
+    const skippedA = current.playerA.id
+    const skippedB = current.playerB.id
 
-    // Find next pending match
+    // Remove the skipped match entirely
+    updated.splice(currentMatchIndex, 1)
+
+    // Give skipped players priority by reducing their games played count
+    const newCount = new Map(gamesPlayedCount)
+    newCount.set(skippedA, Math.max((newCount.get(skippedA) || 0) - 1, 0))
+    newCount.set(skippedB, Math.max((newCount.get(skippedB) || 0) - 1, 0))
+    setGamesPlayedCount(newCount)
+
+    // Find next pending match and start it
     const nextIdx = updated.findIndex(m => m.status === 'pending')
     if (nextIdx !== -1) {
       updated[nextIdx].status = 'playing'
       setCurrentMatchIndex(nextIdx)
+    } else {
+      setPhase('round-complete')
     }
+
     setMatches(updated)
     setScoreA('')
     setScoreB('')
     setLuckyA('')
     setLuckyB('')
-    showToast('Game skipped', 'info')
+    showToast('Game skipped — those players get priority next', 'info')
   }
 
   // --- Reshuffle remaining games ---
@@ -615,6 +641,12 @@ export default function RoomSession() {
   }
 
   const startNewRound = () => {
+    // Save current round to history
+    const completedMatches = matches.filter(m => m.status === 'done')
+    if (completedMatches.length > 0) {
+      setPastRounds(prev => [...prev, { roundNumber, matches: completedMatches }])
+    }
+
     const rPlayers = mode === '3-player' ? roomPlayers : shufflePlayers(roomPlayers)
     const roundMatches = generateRound(rPlayers, mode, playedPairs, gamesPlayedCount)
     setMatches(roundMatches)
@@ -948,7 +980,7 @@ export default function RoomSession() {
             </div>
           )}
 
-          {/* Live Standings */}
+          {/* Live Standings (includes all session players, even those who left) */}
           {completedCount > 0 && (
             <div className="bg-background-light rounded-xl p-3 border border-background-lighter">
               <div className="grid grid-cols-[1.2rem_1fr_2.5rem_3.5rem] gap-1 text-xs text-gray-500 font-medium mb-1.5 px-1">
@@ -957,11 +989,12 @@ export default function RoomSession() {
                 <span className="text-center">W-L</span>
                 <span className="text-right">Margin</span>
               </div>
-              {roomPlayers
+              {allSessionPlayers
                 .map(p => {
-                  const wins = matches.filter(m => m.status === 'done' && m.result?.winnerId === p.id).length
-                  const losses = matches.filter(m => m.status === 'done' && m.result?.loserId === p.id).length
-                  const marginPoints = matches
+                  const allRoundMatches = [...pastRounds.flatMap(r => r.matches), ...matches]
+                  const wins = allRoundMatches.filter(m => m.status === 'done' && m.result?.winnerId === p.id).length
+                  const losses = allRoundMatches.filter(m => m.status === 'done' && m.result?.loserId === p.id).length
+                  const marginPoints = allRoundMatches
                     .filter(m => m.status === 'done' && (m.playerA.id === p.id || m.playerB.id === p.id))
                     .reduce((sum, m) => {
                       if (!m.result) return sum
@@ -972,10 +1005,12 @@ export default function RoomSession() {
                     }, 0)
                   const gamesPlayed = wins + losses
                   const avgMargin = gamesPlayed > 0 ? Math.round((marginPoints / gamesPlayed) * 10) / 10 : 0
-                  return { player: p, wins, losses, avgMargin }
+                  const isActive = roomPlayers.some(rp => rp.id === p.id)
+                  return { player: p, wins, losses, avgMargin, gamesPlayed, isActive }
                 })
+                .filter(s => s.gamesPlayed > 0)
                 .sort((a, b) => b.wins - a.wins || b.avgMargin - a.avgMargin)
-                .map(({ player, wins, losses, avgMargin }, i) => (
+                .map(({ player, wins, losses, avgMargin, isActive }, i) => (
                   <div
                     key={player.id}
                     className={`grid grid-cols-[1.2rem_1fr_2.5rem_3.5rem] gap-1 items-center px-1 py-1 rounded-lg text-xs ${
@@ -983,7 +1018,9 @@ export default function RoomSession() {
                     }`}
                   >
                     <span className={`font-bold ${i === 0 && wins > 0 ? 'text-accent' : 'text-gray-500'}`}>{i + 1}</span>
-                    <span className="text-white font-medium truncate">{player.displayName}</span>
+                    <span className={`font-medium truncate ${isActive ? 'text-white' : 'text-gray-500 italic'}`}>
+                      {player.displayName}{!isActive ? ' (left)' : ''}
+                    </span>
                     <span className="text-center">
                       <span className="text-success">{wins}</span>
                       <span className="text-gray-600">-</span>
@@ -1206,6 +1243,51 @@ export default function RoomSession() {
               </div>
             </div>
           )}
+
+          {/* Past Rounds History */}
+          {pastRounds.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowPastRounds(prev => !prev)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-background-light border border-background-lighter text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                <span className="font-medium">Previous Rounds ({pastRounds.length})</span>
+                <svg className={`w-4 h-4 transition-transform ${showPastRounds ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showPastRounds && (
+                <div className="mt-2 space-y-3">
+                  {pastRounds.map((round) => (
+                    <div key={round.roundNumber} className="bg-background-light rounded-xl p-3 border border-background-lighter">
+                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Round {round.roundNumber}</h4>
+                      <div className="space-y-1">
+                        {round.matches.map(m => {
+                          const winnerIsA = m.result!.winnerId === m.playerA.id
+                          const eloDelta = m.result!.winnerEloDelta
+                          return (
+                            <div key={m.id} className="flex items-center justify-between text-xs px-2 py-1.5 rounded-lg bg-background/60">
+                              <div className="flex items-center gap-1.5">
+                                <span className={winnerIsA ? 'text-success font-semibold' : 'text-gray-400'}>{m.playerA.displayName}</span>
+                                <span className="text-gray-600">vs</span>
+                                <span className={!winnerIsA ? 'text-success font-semibold' : 'text-gray-400'}>{m.playerB.displayName}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-white">{m.result!.scoreA}–{m.result!.scoreB}</span>
+                                {eloDelta != null && (
+                                  <span className="text-[10px] text-gray-500">±{Math.abs(Math.round(eloDelta))}</span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1324,23 +1406,28 @@ export default function RoomSession() {
             </div>
           </div>
 
-          {/* Player Win Summary */}
+          {/* Session Standings (all rounds combined) */}
           <div>
-            <h3 className="text-sm font-medium text-gray-400 mb-2">Round Standings</h3>
+            <h3 className="text-sm font-medium text-gray-400 mb-2">Session Standings</h3>
             <div className="space-y-1.5">
-              {roomPlayers
+              {allSessionPlayers
                 .map(p => {
-                  const wins = matches.filter(m => m.status === 'done' && m.result?.winnerId === p.id).length
-                  const losses = matches.filter(m => m.status === 'done' && m.result?.loserId === p.id).length
-                  return { player: p, wins, losses }
+                  const allRoundMatches = [...pastRounds.flatMap(r => r.matches), ...matches]
+                  const wins = allRoundMatches.filter(m => m.status === 'done' && m.result?.winnerId === p.id).length
+                  const losses = allRoundMatches.filter(m => m.status === 'done' && m.result?.loserId === p.id).length
+                  const isActive = roomPlayers.some(rp => rp.id === p.id)
+                  return { player: p, wins, losses, gamesPlayed: wins + losses, isActive }
                 })
+                .filter(s => s.gamesPlayed > 0)
                 .sort((a, b) => b.wins - a.wins || a.losses - b.losses)
-                .map(({ player, wins, losses }) => (
+                .map(({ player, wins, losses, isActive }) => (
                   <div
                     key={player.id}
                     className="bg-background-light rounded-xl px-4 py-2.5 border border-background-lighter flex items-center justify-between"
                   >
-                    <span className="text-sm text-white font-medium">{player.displayName}</span>
+                    <span className={`text-sm font-medium ${isActive ? 'text-white' : 'text-gray-500 italic'}`}>
+                      {player.displayName}{!isActive ? ' (left)' : ''}
+                    </span>
                     <div className="flex items-center gap-3 text-sm">
                       <span className="text-success">{wins}W</span>
                       <span className="text-error">{losses}L</span>
@@ -1349,6 +1436,51 @@ export default function RoomSession() {
                 ))}
             </div>
           </div>
+
+          {/* Past Rounds History */}
+          {pastRounds.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowPastRounds(prev => !prev)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-background-light border border-background-lighter text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                <span className="font-medium">Previous Rounds ({pastRounds.length})</span>
+                <svg className={`w-4 h-4 transition-transform ${showPastRounds ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showPastRounds && (
+                <div className="mt-2 space-y-3">
+                  {pastRounds.map((round) => (
+                    <div key={round.roundNumber} className="bg-background-light rounded-xl p-3 border border-background-lighter">
+                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Round {round.roundNumber}</h4>
+                      <div className="space-y-1">
+                        {round.matches.map(m => {
+                          const winnerIsA = m.result!.winnerId === m.playerA.id
+                          const eloDelta = m.result!.winnerEloDelta
+                          return (
+                            <div key={m.id} className="flex items-center justify-between text-xs px-2 py-1.5 rounded-lg bg-background/60">
+                              <div className="flex items-center gap-1.5">
+                                <span className={winnerIsA ? 'text-success font-semibold' : 'text-gray-400'}>{m.playerA.displayName}</span>
+                                <span className="text-gray-600">vs</span>
+                                <span className={!winnerIsA ? 'text-success font-semibold' : 'text-gray-400'}>{m.playerB.displayName}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-white">{m.result!.scoreA}–{m.result!.scoreB}</span>
+                                {eloDelta != null && (
+                                  <span className="text-[10px] text-gray-500">±{Math.abs(Math.round(eloDelta))}</span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-3">
             <Button onClick={endSession} variant="secondary" className="flex-1">
