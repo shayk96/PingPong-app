@@ -187,6 +187,10 @@ export async function saveRoom(data: Record<string, unknown>): Promise<void> {
   if (!res.ok) throw new Error('Failed to save room')
 }
 
+export async function endRoom(): Promise<void> {
+  await fetch(`${API_URL}/room`, { method: 'DELETE' })
+}
+
 // ============ Health Check ============
 
 export async function checkHealth() {

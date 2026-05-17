@@ -832,6 +832,14 @@ app.get('/api/room', async (req, res) => {
 // Save/update the active room (upsert — only one room at a time)
 app.put('/api/room', async (req, res) => {
   try {
+    if (req.body.phase === 'ended') {
+      // End ALL active rooms
+      await Room.updateMany(
+        { phase: { $ne: 'ended' } },
+        { phase: 'ended', updatedAt: new Date() }
+      )
+      return res.json({ phase: 'ended' })
+    }
     const room = await Room.findOneAndUpdate(
       { phase: { $ne: 'ended' } },
       { ...req.body, updatedAt: new Date() },
@@ -840,6 +848,19 @@ app.put('/api/room', async (req, res) => {
     res.json(room)
   } catch (err) {
     res.status(500).json({ error: 'Failed to save room' })
+  }
+})
+
+// End all active rooms
+app.delete('/api/room', async (req, res) => {
+  try {
+    await Room.updateMany(
+      { phase: { $ne: 'ended' } },
+      { phase: 'ended', updatedAt: new Date() }
+    )
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to end rooms' })
   }
 })
 

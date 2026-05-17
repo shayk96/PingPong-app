@@ -6,7 +6,7 @@ import { useLeaderboard } from '../hooks/useStats'
 import { validateMatch } from '../lib/validation'
 import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { Button, ToastContainer, useToast } from '../components/ui'
-import { saveRoom as apiSaveRoom, fetchActiveRoom as apiFetchActiveRoom } from '../lib/api'
+import { saveRoom as apiSaveRoom, fetchActiveRoom as apiFetchActiveRoom, endRoom as apiEndRoom } from '../lib/api'
 import type { User, NewMatchInput } from '../types'
 import {
   RoomMatch,
@@ -35,6 +35,7 @@ export default function RoomSession() {
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [isHost, setIsHost] = useState(false)
   const [isViewer, setIsViewer] = useState(false)
+  const endingRef = useRef(false)
 
   // Setup phase
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -173,19 +174,20 @@ export default function RoomSession() {
     oddMatchAdded,
   }), [phase, roomPlayers, allSessionPlayers, mode, matches, currentMatchIndex, roundNumber, playedPairs, gamesPlayedCount, pastRounds, oddMatchAdded])
 
-  // Sync room state to backend (host only)
+  // Sync room state to backend (any active participant)
   const syncRoomToBackend = useCallback(async () => {
-    if (!isHost || isViewer) return
+    if (phase === 'setup' || endingRef.current) return
     try {
+      lastLocalWrite.current = Date.now()
       await apiSaveRoom(serializeRoom())
     } catch {
       // Silent fail — room sync is best-effort
     }
-  }, [isHost, isViewer, serializeRoom])
+  }, [phase, serializeRoom])
 
-  // Auto-sync to backend when room state changes (host only)
+  // Auto-sync to backend when room state changes
   useEffect(() => {
-    if (!isHost || isViewer || phase === 'setup') return
+    if (phase === 'setup' || endingRef.current) return
     syncRoomToBackend()
   }, [matches, phase, roomPlayers, currentMatchIndex, roundNumber, pastRounds])
 
@@ -219,7 +221,10 @@ export default function RoomSession() {
     setPhase((data.phase as Phase) || 'playing')
   }, [players])
 
-  // On load, check for an active room — if one exists and we're not the host, become a viewer
+  // Track when this device last wrote to avoid overwriting own changes
+  const lastLocalWrite = useRef<number>(0)
+
+  // On load, check for an active room — if one exists and we're not the host, join it
   useEffect(() => {
     if (players.length === 0 || isHost) return
     apiFetchActiveRoom().then(data => {
@@ -230,23 +235,34 @@ export default function RoomSession() {
     }).catch(() => { /* no active room */ })
   }, [players, isHost])
 
-  // Poll for updates (viewer mode)
+  // Poll for updates from other devices
   useEffect(() => {
-    if (!isViewer || players.length === 0) return
+    if (phase === 'setup' || players.length === 0 || endingRef.current) return
     const interval = setInterval(async () => {
+      if (endingRef.current) return
+      // Skip poll if we just wrote (avoid overwriting our own changes)
+      if (Date.now() - lastLocalWrite.current < 4000) return
       try {
         const data = await apiFetchActiveRoom()
         if (data) {
-          loadRoomFromBackend(data)
           if (data.phase === 'ended') {
             setIsViewer(false)
+            setIsHost(false)
             setPhase('setup')
+            return
+          }
+          // Only load if the backend has newer data (different match index or match count)
+          const serverMatchCount = ((data.matches as any[]) || []).filter((m: any) => m.status === 'done').length
+          const localMatchCount = matches.filter(m => m.status === 'done').length
+          const serverIdx = (data.currentMatchIndex as number) ?? 0
+          if (serverMatchCount !== localMatchCount || serverIdx !== currentMatchIndex) {
+            loadRoomFromBackend(data)
           }
         }
       } catch { /* silent */ }
     }, 3000)
     return () => clearInterval(interval)
-  }, [isViewer, loadRoomFromBackend, players])
+  }, [phase, players, loadRoomFromBackend, matches, currentMatchIndex])
 
   // Focus first score input when match changes
   useEffect(() => {
@@ -262,6 +278,7 @@ export default function RoomSession() {
       return
     }
 
+    endingRef.current = false
     const shuffled = shufflePlayers(selected)
     const m = getRoomMode(shuffled.length)
     setRoomPlayers(shuffled)
@@ -804,9 +821,11 @@ export default function RoomSession() {
   }
 
   const endSession = async () => {
-    if (isHost) {
-      try { await apiSaveRoom({ phase: 'ended' }) } catch { /* silent */ }
-    }
+    endingRef.current = true
+    setPhase('setup')
+    setIsHost(false)
+    setIsViewer(false)
+    try { await apiEndRoom() } catch { /* silent */ }
     await refreshPlayers()
     navigate('/leaderboard')
   }
@@ -846,7 +865,7 @@ export default function RoomSession() {
           </p>
         )}
         {isViewer && (
-          <p className="text-xs text-accent mt-1">Viewing live — scores are entered on the host device</p>
+          <p className="text-xs text-accent mt-1">Live — synced across devices</p>
         )}
       </header>
 
