@@ -7,7 +7,7 @@ export function BottomNav() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches') || location.pathname.startsWith('/room')
+  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches') || location.pathname.startsWith('/room') || location.pathname.startsWith('/daily')
 
   // Close menu on outside click
   useEffect(() => {
@@ -43,6 +43,16 @@ export function BottomNav() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                   </svg>
                   Match History
+                </button>
+                <div className="h-px bg-background-lighter" />
+                <button
+                  onClick={() => navigate('/daily')}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-200 hover:bg-background-lighter transition-colors"
+                >
+                  <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                  Daily Ranking
                 </button>
                 <div className="h-px bg-background-lighter" />
                 <button

@@ -24,6 +24,20 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
     return map
   }, [matches])
 
+  // Today's ELO delta per player
+  const todayDeltaMap = useMemo(() => {
+    const map = new Map<string, number>()
+    if (matches.length === 0) return map
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    for (const m of matches) {
+      if (new Date(m.createdAt).getTime() < todayStart) continue
+      map.set(m.winnerId, (map.get(m.winnerId) || 0) + m.winnerEloDelta)
+      map.set(m.loserId, (map.get(m.loserId) || 0) + m.loserEloDelta)
+    }
+    return map
+  }, [matches])
+
   if (entries.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -36,6 +50,7 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
     <div className="space-y-2">
       {entries.map((entry, index) => {
         const pw = perfectWinsMap.get(entry.user.id) || 0
+        const todayDelta = todayDeltaMap.get(entry.user.id) || 0
         return (
           <div
             key={entry.user.id}
@@ -77,10 +92,15 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
             </div>
 
             {/* ELO */}
-            <div className="flex-shrink-0 w-14 text-right">
+            <div className="flex-shrink-0 w-16 text-right">
               <div className="font-display font-bold text-lg text-white">
                 {entry.user.eloRating}
               </div>
+              {todayDelta !== 0 && (
+                <div className={`text-[10px] font-semibold flex items-center justify-end gap-0.5 ${todayDelta > 0 ? 'text-success' : 'text-error'}`}>
+                  {todayDelta > 0 ? '▲' : '▼'} {Math.abs(todayDelta)}
+                </div>
+              )}
             </div>
 
             {/* Delete button */}
