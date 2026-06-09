@@ -203,6 +203,48 @@ export default function Leaderboard() {
       .sort((a, b) => b.avgLucky - a.avgLucky)
   }, [matches, players])
 
+  // Unlucky points leaderboard — lucky points conceded (opponent's lucky points scored against you)
+  const unluckyLeaderboard = useMemo(() => {
+    const sortedByDate = [...matches].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    const firstLuckyMatch = sortedByDate.find(m =>
+      (m.playerALuckyPoints || 0) > 0 || (m.playerBLuckyPoints || 0) > 0
+    )
+    if (!firstLuckyMatch) return []
+    const luckyStartDate = firstLuckyMatch.createdAt
+
+    const playerUnlucky: Record<string, { name: string; total: number; games: number }> = {}
+    const relevantMatches = matches.filter(m => m.createdAt.getTime() >= luckyStartDate.getTime())
+    for (const m of relevantMatches) {
+      const aLucky = m.playerALuckyPoints || 0
+      const bLucky = m.playerBLuckyPoints || 0
+      // Player A concedes bLucky, Player B concedes aLucky
+      if (!playerUnlucky[m.playerAId]) {
+        const p = players.find(pl => pl.id === m.playerAId)
+        playerUnlucky[m.playerAId] = { name: p?.displayName || 'Unknown', total: 0, games: 0 }
+      }
+      playerUnlucky[m.playerAId].total += bLucky
+      playerUnlucky[m.playerAId].games += 1
+      if (!playerUnlucky[m.playerBId]) {
+        const p = players.find(pl => pl.id === m.playerBId)
+        playerUnlucky[m.playerBId] = { name: p?.displayName || 'Unknown', total: 0, games: 0 }
+      }
+      playerUnlucky[m.playerBId].total += aLucky
+      playerUnlucky[m.playerBId].games += 1
+    }
+    return Object.entries(playerUnlucky)
+      .map(([id, data]) => ({
+        id,
+        name: data.name,
+        totalUnlucky: data.total,
+        games: data.games,
+        avgUnlucky: data.games > 0 ? Math.round((data.total / data.games) * 100) / 100 : 0,
+      }))
+      .filter(e => e.totalUnlucky > 0)
+      .sort((a, b) => b.avgUnlucky - a.avgUnlucky)
+  }, [matches, players])
+
+  const [luckyTab, setLuckyTab] = useState<'lucky' | 'unlucky'>('lucky')
+
   const loading = playersLoading || matchesLoading || seasonLoading
 
   // Sort players alphabetically for selection
@@ -792,7 +834,7 @@ export default function Leaderboard() {
         </div>
       </Modal>
 
-      {/* Lucky Points Leaderboard Modal */}
+      {/* Lucky / Unlucky Points Leaderboard Modal */}
       <Modal
         isOpen={showLuckyModal}
         onClose={() => setShowLuckyModal(false)}
@@ -800,44 +842,102 @@ export default function Leaderboard() {
         maxWidth="md"
       >
         <div className="space-y-4">
-          {luckyLeaderboard.length > 0 ? (
-            <>
-              {/* Table header */}
-              <div className="grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
-                <span>#</span>
-                <span>Player</span>
-                <span className="text-right">Avg</span>
-                <span className="text-right">Total</span>
-              </div>
+          {/* Tabs */}
+          <div className="flex gap-1 p-1 bg-background rounded-lg">
+            <button
+              onClick={() => setLuckyTab('lucky')}
+              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                luckyTab === 'lucky' ? 'bg-yellow-500/20 text-yellow-300' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Lucky
+            </button>
+            <button
+              onClick={() => setLuckyTab('unlucky')}
+              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                luckyTab === 'unlucky' ? 'bg-red-500/20 text-red-300' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Unlucky
+            </button>
+          </div>
 
-              <div className="space-y-1">
-                {luckyLeaderboard.map((entry, i) => (
-                  <div
-                    key={entry.id}
-                    className={`grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 items-center px-3 py-2.5 rounded-xl ${
-                      i === 0 ? 'bg-yellow-500/10 border border-yellow-500/25' : 'bg-background border border-background-lighter'
-                    }`}
-                  >
-                    <span className={`text-sm font-bold ${i === 0 ? 'text-yellow-400' : 'text-gray-500'}`}>
-                      {i + 1}
-                    </span>
-                    <span className={`text-sm font-medium truncate ${i === 0 ? 'text-yellow-300' : 'text-white'}`}>
-                      {entry.name}
-                    </span>
-                    <span className={`text-sm font-bold text-right ${i === 0 ? 'text-yellow-400' : 'text-yellow-400/80'}`}>
-                      {entry.avgLucky}
-                    </span>
-                    <span className="text-sm text-gray-500 text-right">
-                      {entry.totalLucky}
-                    </span>
-                  </div>
-                ))}
+          {luckyTab === 'lucky' ? (
+            luckyLeaderboard.length > 0 ? (
+              <>
+                <div className="grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
+                  <span>#</span>
+                  <span>Player</span>
+                  <span className="text-right">Avg</span>
+                  <span className="text-right">Total</span>
+                </div>
+                <div className="space-y-1">
+                  {luckyLeaderboard.map((entry, i) => (
+                    <div
+                      key={entry.id}
+                      className={`grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 items-center px-3 py-2.5 rounded-xl ${
+                        i === 0 ? 'bg-yellow-500/10 border border-yellow-500/25' : 'bg-background border border-background-lighter'
+                      }`}
+                    >
+                      <span className={`text-sm font-bold ${i === 0 ? 'text-yellow-400' : 'text-gray-500'}`}>
+                        {i + 1}
+                      </span>
+                      <span className={`text-sm font-medium truncate ${i === 0 ? 'text-yellow-300' : 'text-white'}`}>
+                        {entry.name}
+                      </span>
+                      <span className={`text-sm font-bold text-right ${i === 0 ? 'text-yellow-400' : 'text-yellow-400/80'}`}>
+                        {entry.avgLucky}
+                      </span>
+                      <span className="text-sm text-gray-500 text-right">
+                        {entry.totalLucky}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8 text-gray-400 text-sm">
+                No lucky points recorded yet
               </div>
-            </>
+            )
           ) : (
-            <div className="text-center py-8 text-gray-400 text-sm">
-              No lucky points recorded yet
-            </div>
+            unluckyLeaderboard.length > 0 ? (
+              <>
+                <div className="grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
+                  <span>#</span>
+                  <span>Player</span>
+                  <span className="text-right">Avg</span>
+                  <span className="text-right">Total</span>
+                </div>
+                <div className="space-y-1">
+                  {unluckyLeaderboard.map((entry, i) => (
+                    <div
+                      key={entry.id}
+                      className={`grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 items-center px-3 py-2.5 rounded-xl ${
+                        i === 0 ? 'bg-red-500/10 border border-red-500/25' : 'bg-background border border-background-lighter'
+                      }`}
+                    >
+                      <span className={`text-sm font-bold ${i === 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                        {i + 1}
+                      </span>
+                      <span className={`text-sm font-medium truncate ${i === 0 ? 'text-red-300' : 'text-white'}`}>
+                        {entry.name}
+                      </span>
+                      <span className={`text-sm font-bold text-right ${i === 0 ? 'text-red-400' : 'text-red-400/80'}`}>
+                        {entry.avgUnlucky}
+                      </span>
+                      <span className="text-sm text-gray-500 text-right">
+                        {entry.totalUnlucky}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8 text-gray-400 text-sm">
+                No unlucky points recorded yet
+              </div>
+            )
           )}
           <Button
             variant="secondary"
