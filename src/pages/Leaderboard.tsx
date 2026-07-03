@@ -243,6 +243,13 @@ export default function Leaderboard() {
       .sort((a, b) => b.avgUnlucky - a.avgUnlucky)
   }, [matches, players])
 
+  // Lookup: total unlucky (conceded) points per player id
+  const unluckyTotalById = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const e of unluckyLeaderboard) map.set(e.id, e.totalUnlucky)
+    return map
+  }, [unluckyLeaderboard])
+
   const [luckyTab, setLuckyTab] = useState<'lucky' | 'unlucky'>('lucky')
 
   const loading = playersLoading || matchesLoading || seasonLoading
@@ -865,17 +872,18 @@ export default function Leaderboard() {
           {luckyTab === 'lucky' ? (
             luckyLeaderboard.length > 0 ? (
               <>
-                <div className="grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
+                <div className="grid grid-cols-[1.5rem_1fr_3rem_3rem_3.5rem] gap-1.5 px-3 text-[10px] text-gray-500 font-medium uppercase tracking-wider">
                   <span>#</span>
                   <span>Player</span>
                   <span className="text-right">Avg</span>
+                  <span className="text-right">Lucky</span>
                   <span className="text-right">Total</span>
                 </div>
                 <div className="space-y-1">
                   {luckyLeaderboard.map((entry, i) => (
                     <div
                       key={entry.id}
-                      className={`grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 items-center px-3 py-2.5 rounded-xl ${
+                      className={`grid grid-cols-[1.5rem_1fr_3rem_3rem_3.5rem] gap-1.5 items-center px-3 py-2.5 rounded-xl ${
                         i === 0 ? 'bg-yellow-500/10 border border-yellow-500/25' : 'bg-background border border-background-lighter'
                       }`}
                     >
@@ -891,9 +899,15 @@ export default function Leaderboard() {
                       <span className="text-sm text-gray-500 text-right">
                         {entry.totalLucky}
                       </span>
+                      <span className="text-sm font-semibold text-right text-accent">
+                        {entry.totalLucky + (unluckyTotalById.get(entry.id) || 0)}
+                      </span>
                     </div>
                   ))}
                 </div>
+                <p className="text-[10px] text-gray-500 px-3">
+                  Total = lucky points + unlucky points (conceded)
+                </p>
               </>
             ) : (
               <div className="text-center py-8 text-gray-400 text-sm">

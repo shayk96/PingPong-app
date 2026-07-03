@@ -10,10 +10,12 @@ import { useMatches } from '../hooks/useMatches'
 import { formatEloDelta } from '../lib/elo'
 import { Modal } from '../components/ui/Modal'
 
+const EDIT_WINDOW_MS = 12 * 60 * 60 * 1000 // 12 hours
+
 export default function AllMatches() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, refresh: refreshPlayers } = usePlayers()
-  const { matches, loading: matchesLoading, deleteMatch } = useMatches()
+  const { matches, loading: matchesLoading, deleteMatch, editMatch } = useMatches()
 
   const loading = playersLoading || matchesLoading
 
@@ -24,11 +26,81 @@ export default function AllMatches() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editMatchId, setEditMatchId] = useState('')
+  const [editNameA, setEditNameA] = useState('')
+  const [editNameB, setEditNameB] = useState('')
+  const [editScoreA, setEditScoreA] = useState('')
+  const [editScoreB, setEditScoreB] = useState('')
+  const [editLuckyA, setEditLuckyA] = useState('')
+  const [editLuckyB, setEditLuckyB] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [editError, setEditError] = useState('')
+
   const openDeleteModal = (matchId: string, info: string) => {
     setDeleteMatchId(matchId)
     setDeleteMatchInfo(info)
     setDeleteError('')
     setShowDeleteModal(true)
+  }
+
+  const openEditModal = (match: {
+    id: string
+    playerAScore: number
+    playerBScore: number
+    playerALuckyPoints?: number
+    playerBLuckyPoints?: number
+    playerA?: { displayName: string }
+    playerB?: { displayName: string }
+  }) => {
+    setEditMatchId(match.id)
+    setEditNameA(match.playerA?.displayName || 'Player A')
+    setEditNameB(match.playerB?.displayName || 'Player B')
+    setEditScoreA(String(match.playerAScore))
+    setEditScoreB(String(match.playerBScore))
+    setEditLuckyA(String(match.playerALuckyPoints ?? 0))
+    setEditLuckyB(String(match.playerBLuckyPoints ?? 0))
+    setEditError('')
+    setShowEditModal(true)
+  }
+
+  const handleEdit = async () => {
+    setEditing(true)
+    setEditError('')
+    const scoreA = parseInt(editScoreA)
+    const scoreB = parseInt(editScoreB)
+    const luckyA = parseInt(editLuckyA) || 0
+    const luckyB = parseInt(editLuckyB) || 0
+    if (isNaN(scoreA) || isNaN(scoreB)) {
+      setEditError('Enter valid scores')
+      setEditing(false)
+      return
+    }
+    if (scoreA === scoreB) {
+      setEditError('Scores cannot be tied')
+      setEditing(false)
+      return
+    }
+    if (luckyA > scoreA || luckyB > scoreB) {
+      setEditError('Lucky points cannot exceed a player\'s score')
+      setEditing(false)
+      return
+    }
+    try {
+      await editMatch(editMatchId, {
+        playerAScore: scoreA,
+        playerBScore: scoreB,
+        playerALuckyPoints: luckyA,
+        playerBLuckyPoints: luckyB,
+      })
+      await refreshPlayers()
+      setShowEditModal(false)
+    } catch (err: unknown) {
+      setEditError(err instanceof Error ? err.message : 'Failed to edit match')
+    } finally {
+      setEditing(false)
+    }
   }
 
   const handleDelete = async () => {
@@ -131,6 +203,7 @@ export default function AllMatches() {
                     hour: '2-digit',
                     minute: '2-digit',
                   })
+                  const canEdit = Date.now() - match.createdAt.getTime() <= EDIT_WINDOW_MS
 
                   return (
                     <div
@@ -186,11 +259,22 @@ export default function AllMatches() {
                         </div>
                       </div>
 
-                      {/* Time + match type + delete */}
+                      {/* Time + match type + edit/delete */}
                       <div className="flex items-center justify-between mt-2 pt-2 border-t border-background-lighter">
                         <span className="text-xs text-gray-500">{timeStr}</span>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-gray-600">First to {match.matchType}</span>
+                          {canEdit && (
+                            <button
+                              onClick={() => openEditModal(match)}
+                              className="text-gray-600 hover:text-accent transition-colors p-1"
+                              title="Edit match (available for 12 hours)"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                          )}
                           <button
                             onClick={() => openDeleteModal(
                               match.id,
@@ -219,6 +303,95 @@ export default function AllMatches() {
           <p className="text-gray-400">Start playing to see match history here!</p>
         </div>
       )}
+
+      {/* Edit match modal */}
+      <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Match">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            You can edit a game's score and lucky points for up to 12 hours after it was played. Ratings will be recalculated.
+          </p>
+
+          {/* Scores */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">Score</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <span className="block text-sm text-white mb-1 truncate">{editNameA}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={editScoreA}
+                  onChange={e => setEditScoreA(e.target.value)}
+                  className="w-full bg-background border border-background-lighter rounded-lg px-3 py-2 text-white text-lg font-display font-bold text-center focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <span className="block text-sm text-white mb-1 truncate">{editNameB}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={editScoreB}
+                  onChange={e => setEditScoreB(e.target.value)}
+                  className="w-full bg-background border border-background-lighter rounded-lg px-3 py-2 text-white text-lg font-display font-bold text-center focus:outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Lucky points */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">Lucky Points</label>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={editLuckyA}
+                onChange={e => setEditLuckyA(e.target.value)}
+                className="w-full bg-background border border-background-lighter rounded-lg px-3 py-2 text-yellow-300 text-center focus:outline-none focus:border-primary"
+              />
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={editLuckyB}
+                onChange={e => setEditLuckyB(e.target.value)}
+                className="w-full bg-background border border-background-lighter rounded-lg px-3 py-2 text-yellow-300 text-center focus:outline-none focus:border-primary"
+              />
+            </div>
+          </div>
+
+          {editError && (
+            <p className="text-error text-sm">{editError}</p>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowEditModal(false)}
+              className="flex-1 px-4 py-2.5 bg-background-lighter text-white rounded-xl font-medium hover:bg-gray-600 transition-colors"
+              disabled={editing}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleEdit}
+              disabled={editing}
+              className="flex-1 px-4 py-2.5 bg-accent text-white rounded-xl font-medium hover:bg-accent-600 transition-colors disabled:opacity-50"
+            >
+              {editing ? (
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                </span>
+              ) : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Delete match confirmation modal */}
       <Modal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete Match">

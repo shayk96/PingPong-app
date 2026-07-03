@@ -80,6 +80,24 @@ export async function createMatch(data: {
   return res.json()
 }
 
+export async function updateMatch(matchId: string, data: {
+  playerAScore: number
+  playerBScore: number
+  playerALuckyPoints?: number
+  playerBLuckyPoints?: number
+}) {
+  const res = await fetch(`${API_URL}/matches/${matchId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error || 'Failed to edit match')
+  }
+  return res.json()
+}
+
 export async function undoMatch(matchId: string) {
   const res = await fetch(`${API_URL}/matches/${matchId}/undo`, {
     method: 'POST',

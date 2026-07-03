@@ -640,6 +640,123 @@ app.post('/api/matches/:id/undo', async (req, res) => {
   }
 })
 
+// Edit a match (12-hour window) — update scores and/or lucky points, recompute ELO
+const EDIT_WINDOW_MS = 12 * 60 * 60 * 1000 // 12 hours
+
+app.put('/api/matches/:id', async (req, res) => {
+  const { id } = req.params
+  const { playerAScore, playerBScore, playerALuckyPoints, playerBLuckyPoints } = req.body
+
+  if (playerAScore === undefined || playerBScore === undefined) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+
+  const scoreA = parseInt(playerAScore)
+  const scoreB = parseInt(playerBScore)
+  if (isNaN(scoreA) || isNaN(scoreB) || scoreA < 0 || scoreB < 0) {
+    return res.status(400).json({ error: 'Invalid scores' })
+  }
+  if (scoreA === scoreB) {
+    return res.status(400).json({ error: 'Scores cannot be tied' })
+  }
+
+  const luckyA = parseInt(playerALuckyPoints) || 0
+  const luckyB = parseInt(playerBLuckyPoints) || 0
+  if (luckyA < 0 || luckyB < 0) {
+    return res.status(400).json({ error: 'Lucky points cannot be negative' })
+  }
+  if (luckyA > scoreA) {
+    return res.status(400).json({ error: 'Player A lucky points cannot exceed their score' })
+  }
+  if (luckyB > scoreB) {
+    return res.status(400).json({ error: 'Player B lucky points cannot exceed their score' })
+  }
+
+  try {
+    const match = await Match.findOne({ id })
+    if (!match) {
+      return res.status(404).json({ error: 'Match not found' })
+    }
+
+    // Check edit window
+    const elapsed = Date.now() - new Date(match.createdAt).getTime()
+    if (elapsed > EDIT_WINDOW_MS) {
+      return res.status(403).json({ error: 'Edit window has expired (12 hours)' })
+    }
+
+    // Revert the old match effect on both players
+    await User.updateOne(
+      { id: match.winnerId },
+      { $inc: { eloRating: -match.winnerEloDelta, wins: -1 } }
+    )
+    await User.updateOne(
+      { id: match.loserId },
+      { $inc: { eloRating: -match.loserEloDelta, losses: -1 } }
+    )
+
+    // Fetch players in their reverted (pre-match) state
+    const playerA = await User.findOne({ id: match.playerAId })
+    const playerB = await User.findOne({ id: match.playerBId })
+    if (!playerA || !playerB) {
+      return res.status(400).json({ error: 'Players not found' })
+    }
+
+    // Determine new winner/loser from edited scores
+    const winnerId = scoreA > scoreB ? match.playerAId : match.playerBId
+    const loserId = winnerId === match.playerAId ? match.playerBId : match.playerAId
+    const winner = winnerId === playerA.id ? playerA : playerB
+    const loser = loserId === playerA.id ? playerA : playerB
+    const winnerScore = winnerId === match.playerAId ? scoreA : scoreB
+    const loserScore = loserId === match.playerAId ? scoreA : scoreB
+
+    // Recompute ELO deltas
+    const winnerGamesPlayed = winner.wins + winner.losses
+    const loserGamesPlayed = loser.wins + loser.losses
+    const winnerK = getKFactor(winnerGamesPlayed)
+    const loserK = getKFactor(loserGamesPlayed)
+    const avgK = (winnerK + loserK) / 2
+    const marginMult = getMarginMultiplier(winnerScore, loserScore)
+    const expWinner = expectedScore(winner.eloRating, loser.eloRating)
+    const delta = Math.round(avgK * marginMult * (1 - expWinner))
+    const winnerDelta = delta
+    const loserDelta = -delta
+
+    // Apply the new match effect
+    await User.updateOne(
+      { id: winnerId },
+      { $inc: { eloRating: winnerDelta, wins: 1 } }
+    )
+    await User.updateOne(
+      { id: loserId },
+      { $inc: { eloRating: loserDelta, losses: 1 } }
+    )
+
+    // Update the match document (keep original createdAt)
+    match.playerAScore = scoreA
+    match.playerBScore = scoreB
+    match.winnerId = winnerId
+    match.loserId = loserId
+    match.winnerEloDelta = winnerDelta
+    match.loserEloDelta = loserDelta
+    match.playerALuckyPoints = luckyA
+    match.playerBLuckyPoints = luckyB
+    await match.save()
+
+    // Refresh ELO history entries for this match with the new post-match ratings
+    const updatedWinner = await User.findOne({ id: winnerId })
+    const updatedLoser = await User.findOne({ id: loserId })
+    await EloHistory.deleteMany({ matchId: id })
+    await EloHistory.insertMany([
+      { playerId: winnerId, eloRating: updatedWinner.eloRating, matchId: id, timestamp: match.createdAt },
+      { playerId: loserId, eloRating: updatedLoser.eloRating, matchId: id, timestamp: match.createdAt }
+    ])
+
+    res.json(match)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to edit match' })
+  }
+})
+
 // Delete a match
 app.delete('/api/matches/:id', async (req, res) => {
   const { id } = req.params
