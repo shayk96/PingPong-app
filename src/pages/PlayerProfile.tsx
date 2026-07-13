@@ -54,6 +54,7 @@ export default function PlayerProfile() {
   const [editError, setEditError] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [showCompareModal, setShowCompareModal] = useState(false)
+  const [graphRange, setGraphRange] = useState<'all' | '7d' | '30d' | '90d'>('all')
   const editInputRef = useRef<HTMLInputElement>(null)
   const chartRef = useRef<any>(null)
 
@@ -203,10 +204,17 @@ export default function PlayerProfile() {
       dayGroups.set(dayKey, { date: d, eloRating: entry.eloRating })
     })
 
-    const data = Array.from(dayGroups.values()).map(p => ({
+    let data = Array.from(dayGroups.values()).map(p => ({
       x: p.date,
       y: p.eloRating,
     }))
+
+    // Filter to the selected date range (trend recomputes over the visible points)
+    if (graphRange !== 'all') {
+      const days = graphRange === '7d' ? 7 : graphRange === '30d' ? 30 : 90
+      const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+      data = data.filter(p => p.x.getTime() >= cutoff)
+    }
 
     const datasets: { data: { x: Date; y: number }[]; [key: string]: unknown }[] = [{
       label: 'ELO Rating',
@@ -253,7 +261,7 @@ export default function PlayerProfile() {
     }
 
     return { datasets }
-  }, [eloHistory])
+  }, [eloHistory, graphRange])
 
   const chartOptions = {
     responsive: true,
@@ -550,6 +558,25 @@ export default function PlayerProfile() {
           </button>
         </div>
         <div className="bg-background-light rounded-2xl p-4 border border-background-lighter">
+          {/* Date range selector */}
+          <div className="flex gap-1 p-1 bg-background rounded-lg mb-3">
+            {([
+              { id: 'all', label: 'All' },
+              { id: '90d', label: '3M' },
+              { id: '30d', label: '1M' },
+              { id: '7d', label: '1W' },
+            ] as const).map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setGraphRange(opt.id)}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  graphRange === opt.id ? 'bg-accent text-white' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <div className="h-52">
             {eloLoading ? (
               <div className="h-full flex items-center justify-center">
@@ -559,7 +586,7 @@ export default function PlayerProfile() {
               <Line ref={chartRef} data={chartData} options={chartOptions} />
             ) : (
               <div className="h-full flex items-center justify-center text-gray-500 text-sm">
-                Not enough data for a graph yet
+                {graphRange === 'all' ? 'Not enough data for a graph yet' : 'Not enough data in this range'}
               </div>
             )}
           </div>

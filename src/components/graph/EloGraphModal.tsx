@@ -59,6 +59,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
   const [eloHistory, setEloHistory] = useState<EloHistoryEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [playerSearch, setPlayerSearch] = useState('')
+  const [graphRange, setGraphRange] = useState<'all' | '7d' | '30d' | '90d'>('all')
   const chartRef = useRef<any>(null)
 
   // Pre-select players when modal opens
@@ -155,10 +156,17 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
         dayGroups.set(dayKey, { date: d, eloRating: entry.eloRating })
       })
 
-      const data = Array.from(dayGroups.values()).map(p => ({
+      let data = Array.from(dayGroups.values()).map(p => ({
         x: p.date,
         y: p.eloRating,
       }))
+
+      // Filter to the selected date range (trend recomputes over visible points)
+      if (graphRange !== 'all') {
+        const days = graphRange === '7d' ? 7 : graphRange === '30d' ? 30 : 90
+        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+        data = data.filter(p => p.x.getTime() >= cutoff)
+      }
 
       const mainDataset = {
         label: getPlayerName(playerId),
@@ -209,7 +217,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
     })
 
     return { datasets }
-  }, [selectedPlayerIds, eloHistory, players])
+  }, [selectedPlayerIds, eloHistory, players, graphRange])
 
   const chartOptions = {
     responsive: true,
@@ -358,6 +366,28 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
             <p className="text-xs text-gray-500 mt-2 text-center">Tap players to add them to the graph</p>
           )}
         </div>
+
+        {/* Date range selector */}
+        {selectedPlayerIds.length > 0 && (
+          <div className="flex gap-1 p-1 bg-background rounded-lg">
+            {([
+              { id: 'all', label: 'All' },
+              { id: '90d', label: '3M' },
+              { id: '30d', label: '1M' },
+              { id: '7d', label: '1W' },
+            ] as const).map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setGraphRange(opt.id)}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  graphRange === opt.id ? 'bg-accent text-white' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Chart */}
         <div className="bg-background rounded-lg p-4 h-96">
