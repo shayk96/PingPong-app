@@ -5,6 +5,7 @@ import { useMatches } from '../hooks/useMatches'
 import { calculateElo, getRatingTier } from '../lib/elo'
 
 const BASE_ELO = 800
+const MIN_GAMES_ACTIVE = 5
 
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
@@ -49,6 +50,7 @@ export default function RangeScoreboard() {
   const today = startOfDay(new Date())
   const [rangeFrom, setRangeFrom] = useState(addDays(today, -30))
   const [rangeTo, setRangeTo] = useState(today)
+  const [showInactive, setShowInactive] = useState(false)
 
   const playerMap = useMemo(() => {
     const m = new Map<string, string>()
@@ -102,6 +104,12 @@ export default function RangeScoreboard() {
 
     return [...state.values()].sort((a, b) => b.elo - a.elo)
   }, [matches, rangeFrom, rangeTo, playerMap])
+
+  const inactiveCount = useMemo(() => standings.filter(s => s.games < MIN_GAMES_ACTIVE).length, [standings])
+  const visibleStandings = useMemo(
+    () => (showInactive ? standings : standings.filter(s => s.games >= MIN_GAMES_ACTIVE)),
+    [standings, showInactive],
+  )
 
   const totalMatches = useMemo(() => standings.reduce((s, r) => s + r.games, 0) / 2, [standings])
 
@@ -178,6 +186,23 @@ export default function RangeScoreboard() {
         </div>
       </div>
 
+      {/* Active/inactive toggle */}
+      {standings.length > 0 && inactiveCount > 0 && (
+        <button
+          onClick={() => setShowInactive(v => !v)}
+          className="w-full mb-3 flex items-center justify-center gap-2 py-2 rounded-lg bg-background-light border border-background-lighter text-xs font-medium text-gray-300 hover:text-white hover:border-primary/40 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            {showInactive ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            )}
+          </svg>
+          {showInactive ? `Hide inactive (${inactiveCount})` : `Show inactive (${inactiveCount})`}
+        </button>
+      )}
+
       {/* Standings */}
       {standings.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
@@ -186,9 +211,19 @@ export default function RangeScoreboard() {
           </svg>
           <p className="text-sm">No games played in this range</p>
         </div>
+      ) : visibleStandings.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <p className="text-sm">All players have fewer than {MIN_GAMES_ACTIVE} games in this range.</p>
+          <button
+            onClick={() => setShowInactive(true)}
+            className="mt-3 text-sm text-primary-400 hover:text-primary-300"
+          >
+            Show them anyway
+          </button>
+        </div>
       ) : (
         <div className="space-y-2">
-          {standings.map((entry, index) => {
+          {visibleStandings.map((entry, index) => {
             const winRate = entry.games > 0 ? Math.round((entry.wins / entry.games) * 100) : 0
             const eloChange = entry.elo - BASE_ELO
             return (
@@ -204,7 +239,14 @@ export default function RangeScoreboard() {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-white truncate">{entry.name}</div>
+                  <div className="font-semibold text-white truncate flex items-center gap-1.5">
+                    <span className="truncate">{entry.name}</span>
+                    {entry.games < MIN_GAMES_ACTIVE && (
+                      <span className="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-600/40 text-gray-400">
+                        provisional
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-gray-400">
                     {entry.games} game{entry.games !== 1 ? 's' : ''} · {entry.wins}W {entry.losses}L · {winRate}%
                   </div>
@@ -222,9 +264,10 @@ export default function RangeScoreboard() {
         </div>
       )}
 
-      {standings.length > 0 && (
+      {visibleStandings.length > 0 && (
         <div className="mt-4 text-center text-xs text-gray-500">
-          {totalMatches} match{totalMatches !== 1 ? 'es' : ''} · {standings.length} player{standings.length !== 1 ? 's' : ''}
+          {totalMatches} match{totalMatches !== 1 ? 'es' : ''} · {visibleStandings.length} player{visibleStandings.length !== 1 ? 's' : ''}
+          {!showInactive && inactiveCount > 0 && ` · ${inactiveCount} hidden`}
         </div>
       )}
     </div>
