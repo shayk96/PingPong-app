@@ -143,7 +143,8 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
     })
 
     // Create datasets — grouped by day (last game per day), x-axis is date
-    const datasets = selectedPlayerIds.map((playerId, index) => {
+    // Each player gets a main line plus a dashed linear-regression trend line
+    const datasets = selectedPlayerIds.flatMap((playerId, index) => {
       const history = playerHistories[playerId] || []
       const colorIndex = index % PLAYER_COLORS.length
 
@@ -159,7 +160,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
         y: p.eloRating,
       }))
 
-      return {
+      const mainDataset = {
         label: getPlayerName(playerId),
         data,
         borderColor: PLAYER_COLORS[colorIndex].border,
@@ -169,6 +170,42 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
         pointHoverRadius: 6,
         spanGaps: true,
       }
+
+      const result: { data: { x: Date; y: number }[]; [key: string]: unknown }[] = [mainDataset]
+
+      // Linear regression trend line over this player's points
+      if (data.length >= 2) {
+        const n = data.length
+        const xs = data.map(p => p.x.getTime())
+        const ys = data.map(p => p.y)
+        const meanX = xs.reduce((s, v) => s + v, 0) / n
+        const meanY = ys.reduce((s, v) => s + v, 0) / n
+        let num = 0
+        let den = 0
+        for (let i = 0; i < n; i++) {
+          num += (xs[i] - meanX) * (ys[i] - meanY)
+          den += (xs[i] - meanX) ** 2
+        }
+        const slope = den === 0 ? 0 : num / den
+        const intercept = meanY - slope * meanX
+        result.push({
+          label: `${getPlayerName(playerId)} (trend)`,
+          data: [
+            { x: data[0].x, y: Math.round(slope * xs[0] + intercept) },
+            { x: data[n - 1].x, y: Math.round(slope * xs[n - 1] + intercept) },
+          ],
+          borderColor: PLAYER_COLORS[colorIndex].border,
+          backgroundColor: 'transparent',
+          borderDash: [6, 6],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          tension: 0,
+          spanGaps: true,
+        })
+      }
+
+      return result
     })
 
     return { datasets }
@@ -182,7 +219,9 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
         position: 'top' as const,
         labels: {
           color: '#e5e5e5',
-          font: { size: 12 }
+          font: { size: 12 },
+          // Hide trend lines from the legend to reduce clutter
+          filter: (item: { text?: string }) => !item.text?.endsWith('(trend)'),
         }
       },
       tooltip: {
@@ -193,6 +232,12 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
         borderWidth: 1,
       },
       zoom: {
+        // Prevent zooming/panning beyond the original data range,
+        // which otherwise produces an invalid range and blank chart
+        limits: {
+          x: { min: 'original' as const, max: 'original' as const },
+          y: { min: 'original' as const, max: 'original' as const },
+        },
         pan: {
           enabled: true,
           mode: 'xy' as const,
@@ -212,7 +257,6 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
       x: {
         type: 'time' as const,
         time: {
-          unit: 'day',
           displayFormats: {
             day: 'MMM d',
             week: 'MMM d',
@@ -223,7 +267,9 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
         ticks: {
           color: '#9ca3af',
           maxRotation: 45,
-          minRotation: 0
+          minRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 12,
         },
         grid: { color: 'rgba(75, 75, 75, 0.3)' },
         title: {

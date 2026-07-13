@@ -268,6 +268,10 @@ export default function PlayerProfile() {
         borderWidth: 1,
       },
       zoom: {
+        limits: {
+          x: { min: 'original' as const, max: 'original' as const },
+          y: { min: 'original' as const, max: 'original' as const },
+        },
         pan: { enabled: true, mode: 'xy' as const },
         zoom: {
           wheel: { enabled: true },
@@ -280,11 +284,10 @@ export default function PlayerProfile() {
       x: {
         type: 'time' as const,
         time: {
-          unit: 'day' as const,
           displayFormats: { day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' },
           tooltipFormat: 'MMM d, yyyy',
         },
-        ticks: { color: '#9ca3af', maxRotation: 45 },
+        ticks: { color: '#9ca3af', maxRotation: 45, autoSkip: true, maxTicksLimit: 10 },
         grid: { color: 'rgba(75, 75, 75, 0.3)' },
       },
       y: {
