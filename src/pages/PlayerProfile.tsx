@@ -28,6 +28,18 @@ import { getRatingTier, formatEloDelta } from '../lib/elo'
 import { Button } from '../components/ui'
 import { EloGraphModal } from '../components/graph/EloGraphModal'
 
+function toInputDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function fromInputDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
 // Register Chart.js components
 ChartJS.register(
   CategoryScale,
@@ -54,7 +66,9 @@ export default function PlayerProfile() {
   const [editError, setEditError] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [showCompareModal, setShowCompareModal] = useState(false)
-  const [graphRange, setGraphRange] = useState<'all' | '7d' | '30d' | '90d'>('all')
+  const [graphRange, setGraphRange] = useState<'all' | '7d' | '30d' | '90d' | 'custom'>('all')
+  const [rangeFrom, setRangeFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+  const [rangeTo, setRangeTo] = useState<Date>(() => new Date())
   const editInputRef = useRef<HTMLInputElement>(null)
   const chartRef = useRef<any>(null)
 
@@ -210,7 +224,11 @@ export default function PlayerProfile() {
     }))
 
     // Filter to the selected date range (trend recomputes over the visible points)
-    if (graphRange !== 'all') {
+    if (graphRange === 'custom') {
+      const start = new Date(rangeFrom.getFullYear(), rangeFrom.getMonth(), rangeFrom.getDate()).getTime()
+      const end = new Date(rangeTo.getFullYear(), rangeTo.getMonth(), rangeTo.getDate(), 23, 59, 59, 999).getTime()
+      data = data.filter(p => p.x.getTime() >= start && p.x.getTime() <= end)
+    } else if (graphRange !== 'all') {
       const days = graphRange === '7d' ? 7 : graphRange === '30d' ? 30 : 90
       const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
       data = data.filter(p => p.x.getTime() >= cutoff)
@@ -261,11 +279,14 @@ export default function PlayerProfile() {
     }
 
     return { datasets }
-  }, [eloHistory, graphRange])
+  }, [eloHistory, graphRange, rangeFrom, rangeTo])
 
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: { right: 12, left: 4, top: 4 },
+    },
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -565,6 +586,7 @@ export default function PlayerProfile() {
               { id: '90d', label: '3M' },
               { id: '30d', label: '1M' },
               { id: '7d', label: '1W' },
+              { id: 'custom', label: 'Custom' },
             ] as const).map(opt => (
               <button
                 key={opt.id}
@@ -577,6 +599,30 @@ export default function PlayerProfile() {
               </button>
             ))}
           </div>
+          {graphRange === 'custom' && (
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex-1">
+                <label className="block text-[10px] uppercase tracking-wide text-gray-500 mb-1">From</label>
+                <input
+                  type="date"
+                  value={toInputDate(rangeFrom)}
+                  max={toInputDate(rangeTo)}
+                  onChange={(e) => e.target.value && setRangeFrom(fromInputDate(e.target.value))}
+                  className="w-full px-2 py-1.5 rounded-lg bg-background border border-background-lighter text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[10px] uppercase tracking-wide text-gray-500 mb-1">To</label>
+                <input
+                  type="date"
+                  value={toInputDate(rangeTo)}
+                  min={toInputDate(rangeFrom)}
+                  onChange={(e) => e.target.value && setRangeTo(fromInputDate(e.target.value))}
+                  className="w-full px-2 py-1.5 rounded-lg bg-background border border-background-lighter text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                />
+              </div>
+            </div>
+          )}
           <div className="h-52">
             {eloLoading ? (
               <div className="h-full flex items-center justify-center">

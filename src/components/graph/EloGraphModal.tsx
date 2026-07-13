@@ -54,12 +54,40 @@ interface EloGraphModalProps {
   initialPlayerIds?: string[]
 }
 
+type GraphRange = 'all' | '7d' | '30d' | '90d' | 'custom'
+
+function toInputDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function fromInputDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+// Resolve a range selection into [startMs, endMs] window bounds
+function resolveRangeWindow(range: GraphRange, from: Date, to: Date): [number, number] {
+  if (range === 'custom') {
+    const start = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime()
+    const end = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999).getTime()
+    return [start, end]
+  }
+  if (range === 'all') return [-Infinity, Infinity]
+  const days = range === '7d' ? 7 : range === '30d' ? 30 : 90
+  return [Date.now() - days * 24 * 60 * 60 * 1000, Infinity]
+}
+
 export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: EloGraphModalProps) {
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([])
   const [eloHistory, setEloHistory] = useState<EloHistoryEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [playerSearch, setPlayerSearch] = useState('')
-  const [graphRange, setGraphRange] = useState<'all' | '7d' | '30d' | '90d'>('all')
+  const [graphRange, setGraphRange] = useState<GraphRange>('all')
+  const [rangeFrom, setRangeFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+  const [rangeTo, setRangeTo] = useState<Date>(() => new Date())
   const chartRef = useRef<any>(null)
 
   // Pre-select players when modal opens
@@ -163,9 +191,8 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
 
       // Filter to the selected date range (trend recomputes over visible points)
       if (graphRange !== 'all') {
-        const days = graphRange === '7d' ? 7 : graphRange === '30d' ? 30 : 90
-        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
-        data = data.filter(p => p.x.getTime() >= cutoff)
+        const [start, end] = resolveRangeWindow(graphRange, rangeFrom, rangeTo)
+        data = data.filter(p => p.x.getTime() >= start && p.x.getTime() <= end)
       }
 
       const mainDataset = {
@@ -217,11 +244,45 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
     })
 
     return { datasets }
-  }, [selectedPlayerIds, eloHistory, players, graphRange])
+  }, [selectedPlayerIds, eloHistory, players, graphRange, rangeFrom, rangeTo])
+
+  // Per-player stats over the selected range (for the summary table)
+  const rangeStats = useMemo(() => {
+    if (selectedPlayerIds.length === 0 || eloHistory.length === 0) return []
+    const [start, end] = resolveRangeWindow(graphRange, rangeFrom, rangeTo)
+    return selectedPlayerIds.map((playerId, index) => {
+      const history = eloHistory
+        .filter(h => h.playerId === playerId)
+        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+
+      const dayGroups = new Map<string, number>()
+      history.forEach((entry) => {
+        const d = new Date(entry.timestamp)
+        if (d.getTime() >= start && d.getTime() <= end) {
+          dayGroups.set(d.toDateString(), entry.eloRating)
+        }
+      })
+      const values = Array.from(dayGroups.values())
+      const startElo = values.length > 0 ? values[0] : null
+      const endElo = values.length > 0 ? values[values.length - 1] : null
+      return {
+        id: playerId,
+        name: getPlayerName(playerId),
+        color: PLAYER_COLORS[index % PLAYER_COLORS.length].border,
+        games: values.length,
+        startElo,
+        endElo,
+        change: startElo !== null && endElo !== null ? endElo - startElo : null,
+      }
+    })
+  }, [selectedPlayerIds, eloHistory, graphRange, rangeFrom, rangeTo])
 
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: { right: 12, left: 4, top: 4 },
+    },
     plugins: {
       legend: {
         position: 'top' as const,
@@ -326,7 +387,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
               aria-label="Search players"
             />
           )}
-          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1.5">
             {filteredPlayers.map((player) => {
               const isSelected = selectedPlayerIds.includes(player.id)
               const colorIndex = selectedPlayerIds.indexOf(player.id)
@@ -369,23 +430,50 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
 
         {/* Date range selector */}
         {selectedPlayerIds.length > 0 && (
-          <div className="flex gap-1 p-1 bg-background rounded-lg">
-            {([
-              { id: 'all', label: 'All' },
-              { id: '90d', label: '3M' },
-              { id: '30d', label: '1M' },
-              { id: '7d', label: '1W' },
-            ] as const).map(opt => (
-              <button
-                key={opt.id}
-                onClick={() => setGraphRange(opt.id)}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  graphRange === opt.id ? 'bg-accent text-white' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <div className="space-y-2">
+            <div className="flex gap-1 p-1 bg-background rounded-lg">
+              {([
+                { id: 'all', label: 'All' },
+                { id: '90d', label: '3M' },
+                { id: '30d', label: '1M' },
+                { id: '7d', label: '1W' },
+                { id: 'custom', label: 'Custom' },
+              ] as const).map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setGraphRange(opt.id)}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    graphRange === opt.id ? 'bg-accent text-white' : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {graphRange === 'custom' && (
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="block text-[10px] uppercase tracking-wide text-gray-500 mb-1">From</label>
+                  <input
+                    type="date"
+                    value={toInputDate(rangeFrom)}
+                    max={toInputDate(rangeTo)}
+                    onChange={(e) => e.target.value && setRangeFrom(fromInputDate(e.target.value))}
+                    className="w-full px-2 py-1.5 rounded-lg bg-background border border-background-lighter text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[10px] uppercase tracking-wide text-gray-500 mb-1">To</label>
+                  <input
+                    type="date"
+                    value={toInputDate(rangeTo)}
+                    min={toInputDate(rangeFrom)}
+                    onChange={(e) => e.target.value && setRangeTo(fromInputDate(e.target.value))}
+                    className="w-full px-2 py-1.5 rounded-lg bg-background border border-background-lighter text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -425,6 +513,50 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
             >
               Reset Zoom
             </button>
+          </div>
+        )}
+
+        {/* Range stats table */}
+        {selectedPlayerIds.length > 0 && rangeStats.some(s => s.games > 0) && (
+          <div className="bg-background rounded-lg overflow-hidden">
+            <div className="px-3 py-2 text-xs font-medium text-gray-300 border-b border-background-lighter">
+              {graphRange === 'all'
+                ? 'ELO change (all time)'
+                : graphRange === 'custom'
+                  ? `ELO change (${toInputDate(rangeFrom)} → ${toInputDate(rangeTo)})`
+                  : `ELO change (last ${graphRange === '7d' ? '7 days' : graphRange === '30d' ? '30 days' : '90 days'})`}
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-wide text-gray-500">
+                  <th className="text-left font-medium px-3 py-1.5">Player</th>
+                  <th className="text-right font-medium px-2 py-1.5">Start</th>
+                  <th className="text-right font-medium px-2 py-1.5">End</th>
+                  <th className="text-right font-medium px-2 py-1.5">Change</th>
+                  <th className="text-right font-medium px-3 py-1.5">Games</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rangeStats.map(s => (
+                  <tr key={s.id} className="border-t border-background-lighter/50">
+                    <td className="px-3 py-1.5 text-white">
+                      <span className="inline-flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                        <span className="truncate">{s.name}</span>
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 text-right text-gray-300">{s.startElo ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-right text-gray-300">{s.endElo ?? '—'}</td>
+                    <td className={`px-2 py-1.5 text-right font-medium ${
+                      s.change === null ? 'text-gray-500' : s.change > 0 ? 'text-green-400' : s.change < 0 ? 'text-red-400' : 'text-gray-400'
+                    }`}>
+                      {s.change === null ? '—' : `${s.change > 0 ? '+' : ''}${s.change}`}
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-gray-400">{s.games}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
