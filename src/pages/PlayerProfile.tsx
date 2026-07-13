@@ -281,6 +281,18 @@ export default function PlayerProfile() {
     return { datasets }
   }, [eloHistory, graphRange, rangeFrom, rangeTo])
 
+  // Extend the x-axis a little past the first/last points so edge markers aren't clipped
+  const xBounds = useMemo(() => {
+    const pts = chartData.datasets[0]?.data as { x: Date }[] | undefined
+    if (!pts || pts.length === 0) return null
+    const times = pts.map(p => p.x.getTime())
+    const min = Math.min(...times)
+    const max = Math.max(...times)
+    const span = max - min || 24 * 60 * 60 * 1000
+    const pad = Math.max(span * 0.04, 12 * 60 * 60 * 1000)
+    return { min: min - pad, max: max + pad }
+  }, [chartData])
+
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -312,12 +324,12 @@ export default function PlayerProfile() {
     scales: {
       x: {
         type: 'time' as const,
-        offset: true,
+        ...(xBounds ? { min: xBounds.min, max: xBounds.max } : {}),
         time: {
           displayFormats: { day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' },
           tooltipFormat: 'MMM d, yyyy',
         },
-        ticks: { color: '#9ca3af', maxRotation: 45, autoSkip: true, maxTicksLimit: 10, includeBounds: true },
+        ticks: { color: '#9ca3af', maxRotation: 45, autoSkip: true, maxTicksLimit: 10 },
         grid: { color: 'rgba(75, 75, 75, 0.3)' },
       },
       y: {

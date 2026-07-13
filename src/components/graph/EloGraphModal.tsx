@@ -277,6 +277,20 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
     })
   }, [selectedPlayerIds, eloHistory, graphRange, rangeFrom, rangeTo])
 
+  // Extend the x-axis a little past the first/last points so edge markers aren't clipped
+  const xBounds = useMemo(() => {
+    const times: number[] = []
+    for (const ds of chartData.datasets) {
+      for (const p of ds.data as { x: Date }[]) times.push(p.x.getTime())
+    }
+    if (times.length === 0) return null
+    const min = Math.min(...times)
+    const max = Math.max(...times)
+    const span = max - min || 24 * 60 * 60 * 1000
+    const pad = Math.max(span * 0.04, 12 * 60 * 60 * 1000)
+    return { min: min - pad, max: max + pad }
+  }, [chartData])
+
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -325,7 +339,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
     scales: {
       x: {
         type: 'time' as const,
-        offset: true,
+        ...(xBounds ? { min: xBounds.min, max: xBounds.max } : {}),
         time: {
           displayFormats: {
             day: 'MMM d',
@@ -340,7 +354,6 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
           minRotation: 0,
           autoSkip: true,
           maxTicksLimit: 12,
-          includeBounds: true,
         },
         grid: { color: 'rgba(75, 75, 75, 0.3)' },
         title: {
