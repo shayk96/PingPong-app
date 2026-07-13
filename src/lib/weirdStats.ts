@@ -29,6 +29,27 @@ function getDayName(date: Date): string {
   return date.toLocaleDateString('en-US', { weekday: 'long' })
 }
 
+// Lucky points were introduced partway through — only count games from the first
+// match that recorded any lucky points, so early zeroed games don't skew averages.
+function getLuckyStart(matches: Match[]): number | null {
+  let earliest: number | null = null
+  for (const m of matches) {
+    if ((m.playerALuckyPoints ?? 0) > 0 || (m.playerBLuckyPoints ?? 0) > 0) {
+      const t = m.createdAt.getTime()
+      if (earliest === null || t < earliest) earliest = t
+    }
+  }
+  return earliest
+}
+
+function playerLuckyInMatch(m: Match, playerId: string): number {
+  return m.playerAId === playerId ? (m.playerALuckyPoints ?? 0) : (m.playerBLuckyPoints ?? 0)
+}
+
+function opponentLuckyInMatch(m: Match, playerId: string): number {
+  return m.playerAId === playerId ? (m.playerBLuckyPoints ?? 0) : (m.playerALuckyPoints ?? 0)
+}
+
 // ============ Stat Generators ============
 
 /**
@@ -485,6 +506,87 @@ const deuceRate: StatGenerator = (matches) => {
   return null
 }
 
+/**
+ * "X is the luckiest, averaging Y lucky points per game"
+ */
+const luckiestPlayer: StatGenerator = (matches, players) => {
+  const start = getLuckyStart(matches)
+  if (start === null) return null
+  const relevant = matches.filter(m => m.createdAt.getTime() >= start)
+
+  let best: { name: string; avg: number; count: number } | null = null
+  for (const player of players) {
+    const pm = relevant.filter(m => m.playerAId === player.id || m.playerBId === player.id)
+    if (pm.length < 5) continue
+    const total = pm.reduce((sum, m) => sum + playerLuckyInMatch(m, player.id), 0)
+    const avg = total / pm.length
+    if (!best || avg > best.avg) {
+      best = { name: player.displayName, avg: Math.round(avg * 10) / 10, count: pm.length }
+    }
+  }
+
+  if (best && best.avg >= 1) {
+    return {
+      text: `${best.name} is the luckiest, averaging ${best.avg} lucky points per game`,
+      emoji: '🍀'
+    }
+  }
+  return null
+}
+
+/**
+ * "X had Y lucky points in a single game"
+ */
+const luckiestSingleGame: StatGenerator = (matches, players) => {
+  const start = getLuckyStart(matches)
+  if (start === null) return null
+  const relevant = matches.filter(m => m.createdAt.getTime() >= start)
+
+  let best: { id: string; lucky: number } | null = null
+  for (const m of relevant) {
+    const aL = m.playerALuckyPoints ?? 0
+    const bL = m.playerBLuckyPoints ?? 0
+    if (!best || aL > best.lucky) best = { id: m.playerAId, lucky: aL }
+    if (!best || bL > best.lucky) best = { id: m.playerBId, lucky: bL }
+  }
+
+  if (best && best.lucky >= 4) {
+    return {
+      text: `${getPlayerName(players, best.id)} had ${best.lucky} lucky points in a single game`,
+      emoji: '🍀'
+    }
+  }
+  return null
+}
+
+/**
+ * "X concedes the most lucky points to opponents (Y per game)"
+ */
+const unluckiestConceder: StatGenerator = (matches, players) => {
+  const start = getLuckyStart(matches)
+  if (start === null) return null
+  const relevant = matches.filter(m => m.createdAt.getTime() >= start)
+
+  let best: { name: string; avg: number } | null = null
+  for (const player of players) {
+    const pm = relevant.filter(m => m.playerAId === player.id || m.playerBId === player.id)
+    if (pm.length < 5) continue
+    const conceded = pm.reduce((sum, m) => sum + opponentLuckyInMatch(m, player.id), 0)
+    const avg = conceded / pm.length
+    if (!best || avg > best.avg) {
+      best = { name: player.displayName, avg: Math.round(avg * 10) / 10 }
+    }
+  }
+
+  if (best && best.avg >= 1.5) {
+    return {
+      text: `${best.name} concedes ${best.avg} lucky points per game to opponents`,
+      emoji: '😅'
+    }
+  }
+  return null
+}
+
 // ============ Main Export ============
 
 const allGenerators: StatGenerator[] = [
@@ -503,6 +605,9 @@ const allGenerators: StatGenerator[] = [
   mostFrequentMatchup,
   stingiestDefender,
   deuceRate,
+  luckiestPlayer,
+  luckiestSingleGame,
+  unluckiestConceder,
 ]
 
 /**
