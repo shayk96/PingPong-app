@@ -936,10 +936,19 @@ app.post('/api/seasons/end', async (req, res) => {
 
 // ============ Room Session Endpoints ============
 
-// Get the active room
+// Rooms inactive for longer than this are auto-closed
+const ROOM_MAX_AGE_MS = 2 * 60 * 60 * 1000 // 2 hours
+
+// Get the active room (auto-closing any that have been idle too long)
 app.get('/api/room', async (req, res) => {
   try {
-    const room = await Room.findOne({ phase: { $ne: 'ended' } }).sort({ updatedAt: -1 })
+    const cutoff = new Date(Date.now() - ROOM_MAX_AGE_MS)
+    // Auto-close stale rooms that haven't been updated in over 2 hours
+    await Room.updateMany(
+      { phase: { $ne: 'ended' }, updatedAt: { $lt: cutoff } },
+      { phase: 'ended' }
+    )
+    const room = await Room.findOne({ phase: { $ne: 'ended' }, updatedAt: { $gte: cutoff } }).sort({ updatedAt: -1 })
     res.json(room || null)
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch room' })

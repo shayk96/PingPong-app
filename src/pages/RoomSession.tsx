@@ -25,6 +25,14 @@ import {
 
 type Phase = 'setup' | 'playing' | 'round-complete'
 
+// Rooms inactive for longer than this are considered stale and ignored/auto-closed
+const ROOM_MAX_AGE_MS = 2 * 60 * 60 * 1000 // 2 hours
+
+function isRoomStale(data: Record<string, unknown>): boolean {
+  const updatedAt = data.updatedAt ? new Date(data.updatedAt as string).getTime() : 0
+  return !updatedAt || Date.now() - updatedAt > ROOM_MAX_AGE_MS
+}
+
 export default function RoomSession() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, refresh: refreshPlayers } = usePlayers()
@@ -179,7 +187,11 @@ export default function RoomSession() {
     if (phase === 'setup' || endingRef.current) return
     try {
       lastLocalWrite.current = Date.now()
-      await apiSaveRoom(serializeRoom())
+      const saved = await apiSaveRoom(serializeRoom())
+      // Track our own write so polling doesn't reload it back over us
+      if (saved?.updatedAt) {
+        lastLoadedUpdatedAt.current = new Date(saved.updatedAt as string).getTime()
+      }
     } catch {
       // Silent fail — room sync is best-effort
     }
@@ -188,11 +200,20 @@ export default function RoomSession() {
   // Auto-sync to backend when room state changes
   useEffect(() => {
     if (phase === 'setup' || endingRef.current) return
+    // Skip the sync triggered by applying a freshly-loaded remote state (avoids write ping-pong)
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false
+      return
+    }
     syncRoomToBackend()
   }, [matches, phase, roomPlayers, currentMatchIndex, roundNumber, pastRounds])
 
   // Deserialize room from backend data
   const loadRoomFromBackend = useCallback((data: Record<string, unknown>) => {
+    // Applying remote state — mark it so the resulting auto-sync is skipped,
+    // and record its timestamp so polling doesn't reload it again
+    skipNextSyncRef.current = true
+    lastLoadedUpdatedAt.current = data.updatedAt ? new Date(data.updatedAt as string).getTime() : Date.now()
     const playerMap = new Map(players.map(p => [p.id, p]))
     const resolvePlayer = (id: string) => playerMap.get(id) || { id, displayName: '?', eloRating: 800, wins: 0, losses: 0, createdAt: new Date() } as User
     const resolveMatch = (m: any): RoomMatch => ({
@@ -223,12 +244,16 @@ export default function RoomSession() {
 
   // Track when this device last wrote to avoid overwriting own changes
   const lastLocalWrite = useRef<number>(0)
+  // Timestamp of the most recent room state we've loaded/written (for updatedAt-based sync)
+  const lastLoadedUpdatedAt = useRef<number>(0)
+  // Set when applying remote state, to skip the auto-sync it would otherwise trigger
+  const skipNextSyncRef = useRef(false)
 
-  // On load, check for an active room — if one exists and we're not the host, join it
+  // On load, check for an active room — if one exists and is recent, join it
   useEffect(() => {
     if (players.length === 0 || isHost) return
     apiFetchActiveRoom().then(data => {
-      if (data && (data.phase === 'playing' || data.phase === 'round-complete')) {
+      if (data && !isRoomStale(data) && (data.phase === 'playing' || data.phase === 'round-complete')) {
         setIsViewer(true)
         loadRoomFromBackend(data)
       }
@@ -244,6 +269,12 @@ export default function RoomSession() {
       if (Date.now() - lastLocalWrite.current < 4000) return
       try {
         const data = await apiFetchActiveRoom()
+        // Room ended or auto-closed (stale) on the server — leave the session
+        if (isViewer && (!data || data.phase === 'ended')) {
+          setIsViewer(false)
+          setPhase('setup')
+          return
+        }
         if (data) {
           if (data.phase === 'ended') {
             setIsViewer(false)
@@ -251,18 +282,17 @@ export default function RoomSession() {
             setPhase('setup')
             return
           }
-          // Only load if the backend has newer data (different match index or match count)
-          const serverMatchCount = ((data.matches as any[]) || []).filter((m: any) => m.status === 'done').length
-          const localMatchCount = matches.filter(m => m.status === 'done').length
-          const serverIdx = (data.currentMatchIndex as number) ?? 0
-          if (serverMatchCount !== localMatchCount || serverIdx !== currentMatchIndex) {
+          // Reload whenever the backend has a newer version than what we last saw/wrote.
+          // This propagates ALL changes (scores, edits, reshuffle, add/remove player, etc.)
+          const serverUpdatedAt = data.updatedAt ? new Date(data.updatedAt as string).getTime() : 0
+          if (serverUpdatedAt > lastLoadedUpdatedAt.current) {
             loadRoomFromBackend(data)
           }
         }
       } catch { /* silent */ }
     }, 3000)
     return () => clearInterval(interval)
-  }, [phase, players, loadRoomFromBackend, matches, currentMatchIndex])
+  }, [phase, players, loadRoomFromBackend, isViewer])
 
   // Focus first score input when match changes
   useEffect(() => {
@@ -277,6 +307,15 @@ export default function RoomSession() {
       showToast('Select at least 3 players', 'error')
       return
     }
+
+    // Warn if another active room already exists (would be replaced)
+    try {
+      const existing = await apiFetchActiveRoom()
+      if (existing && !isRoomStale(existing) && (existing.phase === 'playing' || existing.phase === 'round-complete')) {
+        const ok = confirm('There is already an active room. Starting a new session will replace it. Continue?')
+        if (!ok) return
+      }
+    } catch { /* ignore — proceed */ }
 
     endingRef.current = false
     const shuffled = shufflePlayers(selected)
@@ -371,6 +410,20 @@ export default function RoomSession() {
 
     setSubmitting(true)
     try {
+      // Guard against double-scoring the same game from two devices simultaneously
+      try {
+        const serverRoom = await apiFetchActiveRoom()
+        if (serverRoom && Array.isArray(serverRoom.matches)) {
+          const serverMatch = (serverRoom.matches as any[]).find(m => m.id === match.id)
+          if (serverMatch && serverMatch.status === 'done') {
+            showToast('This game was already scored on another device', 'error')
+            loadRoomFromBackend(serverRoom)
+            setSubmitting(false)
+            return
+          }
+        }
+      } catch { /* if the check fails, proceed with submit */ }
+
       const result = await createMatch(input)
 
       // Store backend match ID for potential undo/edit

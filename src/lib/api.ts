@@ -196,13 +196,14 @@ export async function fetchActiveRoom(): Promise<Record<string, unknown> | null>
   return res.json()
 }
 
-export async function saveRoom(data: Record<string, unknown>): Promise<void> {
+export async function saveRoom(data: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   const res = await fetch(`${API_URL}/room`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   })
   if (!res.ok) throw new Error('Failed to save room')
+  return res.json()
 }
 
 export async function endRoom(): Promise<void> {
