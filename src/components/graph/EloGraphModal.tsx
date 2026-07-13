@@ -88,6 +88,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
   const [graphRange, setGraphRange] = useState<GraphRange>('all')
   const [rangeFrom, setRangeFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
   const [rangeTo, setRangeTo] = useState<Date>(() => new Date())
+  const [showSlope, setShowSlope] = useState(false)
   const chartRef = useRef<any>(null)
 
   // Pre-select players when modal opens
@@ -255,24 +256,44 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
         .filter(h => h.playerId === playerId)
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
-      const dayGroups = new Map<string, number>()
+      const dayGroups = new Map<string, { t: number; elo: number }>()
       history.forEach((entry) => {
         const d = new Date(entry.timestamp)
         if (d.getTime() >= start && d.getTime() <= end) {
-          dayGroups.set(d.toDateString(), entry.eloRating)
+          dayGroups.set(d.toDateString(), { t: d.getTime(), elo: entry.eloRating })
         }
       })
-      const values = Array.from(dayGroups.values())
-      const startElo = values.length > 0 ? values[0] : null
-      const endElo = values.length > 0 ? values[values.length - 1] : null
+      const points = Array.from(dayGroups.values())
+      const startElo = points.length > 0 ? points[0].elo : null
+      const endElo = points.length > 0 ? points[points.length - 1].elo : null
+
+      // Least-squares slope (ELO per day) over the visible points
+      let slopePerDay: number | null = null
+      if (points.length >= 2) {
+        const n = points.length
+        const xs = points.map(p => p.t)
+        const ys = points.map(p => p.elo)
+        const meanX = xs.reduce((s, v) => s + v, 0) / n
+        const meanY = ys.reduce((s, v) => s + v, 0) / n
+        let num = 0
+        let den = 0
+        for (let i = 0; i < n; i++) {
+          num += (xs[i] - meanX) * (ys[i] - meanY)
+          den += (xs[i] - meanX) ** 2
+        }
+        const slope = den === 0 ? 0 : num / den
+        slopePerDay = slope * 24 * 60 * 60 * 1000
+      }
+
       return {
         id: playerId,
         name: getPlayerName(playerId),
         color: PLAYER_COLORS[index % PLAYER_COLORS.length].border,
-        games: values.length,
+        games: points.length,
         startElo,
         endElo,
         change: startElo !== null && endElo !== null ? endElo - startElo : null,
+        slopePerDay,
       }
     })
   }, [selectedPlayerIds, eloHistory, graphRange, rangeFrom, rangeTo])
@@ -519,14 +540,22 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
           )}
         </div>
 
-        {/* Reset Zoom Button */}
+        {/* Reset Zoom + Slope toggle */}
         {selectedPlayerIds.length > 0 && (
-          <div className="flex justify-center">
+          <div className="flex justify-center items-center gap-2">
             <button
               onClick={resetZoom}
               className="px-3 py-1.5 text-xs bg-background-lighter text-gray-300 rounded-lg hover:bg-gray-600 transition-colors"
             >
               Reset Zoom
+            </button>
+            <button
+              onClick={() => setShowSlope(v => !v)}
+              className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                showSlope ? 'bg-accent text-white' : 'bg-background-lighter text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              Slope
             </button>
           </div>
         )}
@@ -548,6 +577,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
                   <th className="text-right font-medium px-2 py-1.5">Start</th>
                   <th className="text-right font-medium px-2 py-1.5">End</th>
                   <th className="text-right font-medium px-2 py-1.5">Change</th>
+                  {showSlope && <th className="text-right font-medium px-2 py-1.5">Slope/day</th>}
                   <th className="text-right font-medium px-3 py-1.5">Games</th>
                 </tr>
               </thead>
@@ -567,6 +597,13 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
                     }`}>
                       {s.change === null ? '—' : `${s.change > 0 ? '+' : ''}${s.change}`}
                     </td>
+                    {showSlope && (
+                      <td className={`px-2 py-1.5 text-right font-medium ${
+                        s.slopePerDay === null || s.slopePerDay === undefined ? 'text-gray-500' : s.slopePerDay > 0 ? 'text-green-400' : s.slopePerDay < 0 ? 'text-red-400' : 'text-gray-400'
+                      }`}>
+                        {s.slopePerDay === null || s.slopePerDay === undefined ? '—' : `${s.slopePerDay > 0 ? '+' : ''}${s.slopePerDay.toFixed(1)}`}
+                      </td>
+                    )}
                     <td className="px-3 py-1.5 text-right text-gray-400">{s.games}</td>
                   </tr>
                 ))}

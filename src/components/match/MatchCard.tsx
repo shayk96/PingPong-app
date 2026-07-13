@@ -26,6 +26,9 @@ export function MatchCard({
   canEdit = false
 }: MatchCardProps) {
   const isPlayerAWinner = match.winnerId === match.playerAId
+  const luckyA = match.playerALuckyPoints ?? 0
+  const luckyB = match.playerBLuckyPoints ?? 0
+  const hasLucky = luckyA > 0 || luckyB > 0
 
   // Format date
   const dateStr = match.createdAt.toLocaleDateString('en-US', {
@@ -130,6 +133,17 @@ export function MatchCard({
           </div>
         </div>
       </div>
+
+      {/* Lucky points (only shown when any were recorded) */}
+      {hasLucky && (
+        <div className="mt-2.5 pt-2 border-t border-background-lighter/60 flex items-center justify-center gap-1.5 text-xs text-gray-400">
+          <span aria-hidden>🍀</span>
+          <span className="font-semibold text-gray-300">{luckyA}</span>
+          <span className="text-gray-500">:</span>
+          <span className="font-semibold text-gray-300">{luckyB}</span>
+          <span className="ml-1 text-gray-500">lucky</span>
+        </div>
+      )}
     </div>
   )
 }

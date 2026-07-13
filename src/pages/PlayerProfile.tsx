@@ -69,6 +69,7 @@ export default function PlayerProfile() {
   const [graphRange, setGraphRange] = useState<'all' | '7d' | '30d' | '90d' | 'custom'>('all')
   const [rangeFrom, setRangeFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
   const [rangeTo, setRangeTo] = useState<Date>(() => new Date())
+  const [showSlope, setShowSlope] = useState(false)
   const editInputRef = useRef<HTMLInputElement>(null)
   const chartRef = useRef<any>(null)
 
@@ -246,6 +247,7 @@ export default function PlayerProfile() {
     }]
 
     // Linear regression trend line (least squares over time)
+    let trendSlopePerDay: number | null = null
     if (data.length >= 2) {
       const n = data.length
       const xs = data.map(p => p.x.getTime())
@@ -259,6 +261,7 @@ export default function PlayerProfile() {
         den += (xs[i] - meanX) ** 2
       }
       const slope = den === 0 ? 0 : num / den
+      trendSlopePerDay = slope * 24 * 60 * 60 * 1000
       const intercept = meanY - slope * meanX
       const trendData = [
         { x: data[0].x, y: Math.round(slope * xs[0] + intercept) },
@@ -278,7 +281,7 @@ export default function PlayerProfile() {
       })
     }
 
-    return { datasets }
+    return { datasets, trendSlopePerDay }
   }, [eloHistory, graphRange, rangeFrom, rangeTo])
 
   // Extend the x-axis a little past the first/last points so edge markers aren't clipped
@@ -650,13 +653,33 @@ export default function PlayerProfile() {
             )}
           </div>
           {!eloLoading && chartData.datasets.length > 0 && chartData.datasets[0].data.length > 1 && (
-            <div className="flex justify-center mt-2">
+            <div className="flex justify-center items-center gap-2 mt-2">
               <button
                 onClick={() => chartRef.current?.resetZoom()}
                 className="px-3 py-1 text-xs bg-background text-gray-400 rounded-lg hover:text-white transition-colors"
               >
                 Reset Zoom
               </button>
+              {chartData.trendSlopePerDay !== null && chartData.trendSlopePerDay !== undefined && (
+                <button
+                  onClick={() => setShowSlope(v => !v)}
+                  className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+                    showSlope ? 'bg-accent text-white' : 'bg-background text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Slope
+                </button>
+              )}
+            </div>
+          )}
+          {showSlope && chartData.trendSlopePerDay !== null && chartData.trendSlopePerDay !== undefined && (
+            <div className="mt-2 text-center text-xs">
+              <span className="text-gray-400">Trend slope: </span>
+              <span className={`font-semibold ${
+                chartData.trendSlopePerDay > 0 ? 'text-success' : chartData.trendSlopePerDay < 0 ? 'text-error' : 'text-gray-300'
+              }`}>
+                {chartData.trendSlopePerDay > 0 ? '+' : ''}{chartData.trendSlopePerDay.toFixed(1)} ELO/day
+              </span>
             </div>
           )}
         </div>
