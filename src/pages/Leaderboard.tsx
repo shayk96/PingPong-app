@@ -11,14 +11,15 @@ import { useSeason } from '../hooks/useSeason'
 import { useLeaderboard, useRecentMatchesWithPlayers, isPlayerInactive } from '../hooks/useStats'
 import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { MatchCard } from '../components/match/MatchCard'
+import { EditMatchModal, EDIT_WINDOW_MS } from '../components/match/EditMatchModal'
 import { WeirdStatsBanner } from '../components/WeirdStatsBanner'
 import { Modal, Button, Input, ToastContainer, useToast } from '../components/ui'
-import type { User } from '../types'
+import type { User, Match } from '../types'
 
 export default function Leaderboard() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, addPlayer, deletePlayer, refresh: refreshPlayers } = usePlayers()
-  const { matches, loading: matchesLoading, deleteMatch, undoMatch, refresh: refreshMatches } = useMatches()
+  const { matches, loading: matchesLoading, deleteMatch, editMatch, undoMatch, refresh: refreshMatches } = useMatches()
   const { currentSeason, pastSeasons, loading: seasonLoading, refresh: refreshSeason } = useSeason()
   const [showInactivePlayers, setShowInactivePlayers] = useState(false)
   const leaderboard = useLeaderboard(players, matches, showInactivePlayers)
@@ -42,6 +43,10 @@ export default function Leaderboard() {
   const [deleteMatchId, setDeleteMatchId] = useState('')
   const [deleteMatchInfo, setDeleteMatchInfo] = useState('')
   const [deletingMatch, setDeletingMatch] = useState(false)
+
+  // Edit match modal state
+  const [showEditMatchModal, setShowEditMatchModal] = useState(false)
+  const [editMatchTarget, setEditMatchTarget] = useState<Match | null>(null)
 
   // Season countdown state
   const [seasonTimeLeft, setSeasonTimeLeft] = useState('')
@@ -243,14 +248,29 @@ export default function Leaderboard() {
       .sort((a, b) => b.avgUnlucky - a.avgUnlucky)
   }, [matches, players])
 
-  // Lookup: total unlucky (conceded) points per player id
-  const unluckyTotalById = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const e of unluckyLeaderboard) map.set(e.id, e.totalUnlucky)
-    return map
-  }, [unluckyLeaderboard])
+  // Total lucky leaderboard — average lucky + average unlucky per player
+  const totalLuckyLeaderboard = useMemo(() => {
+    const luckyById = new Map(luckyLeaderboard.map(e => [e.id, { name: e.name, avg: e.avgLucky }]))
+    const unluckyById = new Map(unluckyLeaderboard.map(e => [e.id, { name: e.name, avg: e.avgUnlucky }]))
+    const ids = new Set<string>([...luckyById.keys(), ...unluckyById.keys()])
+    return [...ids]
+      .map(id => {
+        const avgLucky = luckyById.get(id)?.avg || 0
+        const avgUnlucky = unluckyById.get(id)?.avg || 0
+        const name = luckyById.get(id)?.name || unluckyById.get(id)?.name || 'Unknown'
+        return {
+          id,
+          name,
+          avgLucky,
+          avgUnlucky,
+          avgTotal: Math.round((avgLucky + avgUnlucky) * 100) / 100,
+        }
+      })
+      .filter(e => e.avgTotal > 0)
+      .sort((a, b) => b.avgTotal - a.avgTotal)
+  }, [luckyLeaderboard, unluckyLeaderboard])
 
-  const [luckyTab, setLuckyTab] = useState<'lucky' | 'unlucky'>('lucky')
+  const [luckyTab, setLuckyTab] = useState<'lucky' | 'unlucky' | 'total'>('lucky')
 
   const loading = playersLoading || matchesLoading || seasonLoading
 
@@ -368,6 +388,22 @@ export default function Leaderboard() {
     setDeleteMatchInfo(matchInfo)
     setShowDeleteMatchModal(true)
   }
+
+  const handleEditMatchClick = (match: Match) => {
+    setEditMatchTarget(match)
+    setShowEditMatchModal(true)
+  }
+
+  const handleSaveEditMatch = useCallback(async (matchId: string, data: {
+    playerAScore: number
+    playerBScore: number
+    playerALuckyPoints: number
+    playerBLuckyPoints: number
+  }) => {
+    await editMatch(matchId, data)
+    await refreshPlayers()
+    await refreshMatches()
+  }, [editMatch, refreshPlayers, refreshMatches])
 
   const handleDeleteMatch = async () => {
     setDeletingMatch(true)
@@ -572,6 +608,8 @@ export default function Leaderboard() {
                 playerA={match.playerA}
                 playerB={match.playerB}
                 canDelete={true}
+                canEdit={Date.now() - match.createdAt.getTime() <= EDIT_WINDOW_MS}
+                onEdit={() => handleEditMatchClick(match)}
                 onDelete={() => {
                   const info = `${match.playerA?.displayName || 'Unknown'} vs ${match.playerB?.displayName || 'Unknown'} (${match.playerAScore}-${match.playerBScore})`
                   handleDeleteMatchClick(match.id, info)
@@ -702,6 +740,16 @@ export default function Leaderboard() {
           </div>
         </div>
       </Modal>
+
+      {/* Edit Match Modal */}
+      <EditMatchModal
+        isOpen={showEditMatchModal}
+        onClose={() => setShowEditMatchModal(false)}
+        match={editMatchTarget}
+        playerA={editMatchTarget ? players.find(p => p.id === editMatchTarget.playerAId) : undefined}
+        playerB={editMatchTarget ? players.find(p => p.id === editMatchTarget.playerBId) : undefined}
+        onSave={handleSaveEditMatch}
+      />
 
       {/* Head to Head Modal */}
       <Modal
@@ -867,23 +915,30 @@ export default function Leaderboard() {
             >
               Unlucky
             </button>
+            <button
+              onClick={() => setLuckyTab('total')}
+              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                luckyTab === 'total' ? 'bg-accent/20 text-accent' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Total
+            </button>
           </div>
 
-          {luckyTab === 'lucky' ? (
+          {luckyTab === 'lucky' && (
             luckyLeaderboard.length > 0 ? (
               <>
-                <div className="grid grid-cols-[1.5rem_1fr_3rem_3rem_3.5rem] gap-1.5 px-3 text-[10px] text-gray-500 font-medium uppercase tracking-wider">
+                <div className="grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
                   <span>#</span>
                   <span>Player</span>
                   <span className="text-right">Avg</span>
-                  <span className="text-right">Lucky</span>
                   <span className="text-right">Total</span>
                 </div>
                 <div className="space-y-1">
                   {luckyLeaderboard.map((entry, i) => (
                     <div
                       key={entry.id}
-                      className={`grid grid-cols-[1.5rem_1fr_3rem_3rem_3.5rem] gap-1.5 items-center px-3 py-2.5 rounded-xl ${
+                      className={`grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 items-center px-3 py-2.5 rounded-xl ${
                         i === 0 ? 'bg-yellow-500/10 border border-yellow-500/25' : 'bg-background border border-background-lighter'
                       }`}
                     >
@@ -899,22 +954,18 @@ export default function Leaderboard() {
                       <span className="text-sm text-gray-500 text-right">
                         {entry.totalLucky}
                       </span>
-                      <span className="text-sm font-semibold text-right text-accent">
-                        {entry.totalLucky + (unluckyTotalById.get(entry.id) || 0)}
-                      </span>
                     </div>
                   ))}
                 </div>
-                <p className="text-[10px] text-gray-500 px-3">
-                  Total = lucky points + unlucky points (conceded)
-                </p>
               </>
             ) : (
               <div className="text-center py-8 text-gray-400 text-sm">
                 No lucky points recorded yet
               </div>
             )
-          ) : (
+          )}
+
+          {luckyTab === 'unlucky' && (
             unluckyLeaderboard.length > 0 ? (
               <>
                 <div className="grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
@@ -950,6 +1001,53 @@ export default function Leaderboard() {
             ) : (
               <div className="text-center py-8 text-gray-400 text-sm">
                 No unlucky points recorded yet
+              </div>
+            )
+          )}
+
+          {luckyTab === 'total' && (
+            totalLuckyLeaderboard.length > 0 ? (
+              <>
+                <div className="grid grid-cols-[1.5rem_1fr_3rem_3rem_3.5rem] gap-1.5 px-3 text-[10px] text-gray-500 font-medium uppercase tracking-wider">
+                  <span>#</span>
+                  <span>Player</span>
+                  <span className="text-right">Lucky</span>
+                  <span className="text-right">Unl.</span>
+                  <span className="text-right">Total</span>
+                </div>
+                <div className="space-y-1">
+                  {totalLuckyLeaderboard.map((entry, i) => (
+                    <div
+                      key={entry.id}
+                      className={`grid grid-cols-[1.5rem_1fr_3rem_3rem_3.5rem] gap-1.5 items-center px-3 py-2.5 rounded-xl ${
+                        i === 0 ? 'bg-accent/10 border border-accent/25' : 'bg-background border border-background-lighter'
+                      }`}
+                    >
+                      <span className={`text-sm font-bold ${i === 0 ? 'text-accent' : 'text-gray-500'}`}>
+                        {i + 1}
+                      </span>
+                      <span className={`text-sm font-medium truncate ${i === 0 ? 'text-accent' : 'text-white'}`}>
+                        {entry.name}
+                      </span>
+                      <span className="text-sm text-yellow-400/80 text-right">
+                        {entry.avgLucky}
+                      </span>
+                      <span className="text-sm text-red-400/80 text-right">
+                        {entry.avgUnlucky}
+                      </span>
+                      <span className={`text-sm font-bold text-right ${i === 0 ? 'text-accent' : 'text-accent/80'}`}>
+                        {entry.avgTotal}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500 px-3">
+                  Total = avg lucky + avg unlucky (conceded) per game
+                </p>
+              </>
+            ) : (
+              <div className="text-center py-8 text-gray-400 text-sm">
+                No lucky points recorded yet
               </div>
             )
           )}

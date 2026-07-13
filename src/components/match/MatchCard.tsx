@@ -12,6 +12,8 @@ interface MatchCardProps {
   playerB?: User
   onDelete?: () => void
   canDelete?: boolean
+  onEdit?: () => void
+  canEdit?: boolean
 }
 
 export function MatchCard({
@@ -19,7 +21,9 @@ export function MatchCard({
   playerA,
   playerB,
   onDelete,
-  canDelete = false
+  canDelete = false,
+  onEdit,
+  canEdit = false
 }: MatchCardProps) {
   const isPlayerAWinner = match.winnerId === match.playerAId
 
@@ -40,6 +44,20 @@ export function MatchCard({
           <span className="text-xs bg-background-lighter px-2 py-0.5 rounded-full text-gray-300">
             First to {match.matchType}
           </span>
+          {canEdit && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit?.()
+              }}
+              className="text-gray-400 hover:text-accent transition-colors p-1"
+              title="Edit match (available for 12 hours)"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          )}
           {canDelete && (
             <button
               onClick={(e) => {

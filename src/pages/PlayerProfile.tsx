@@ -208,18 +208,51 @@ export default function PlayerProfile() {
       y: p.eloRating,
     }))
 
-    return {
-      datasets: [{
-        label: 'ELO Rating',
-        data,
-        borderColor: 'rgb(249, 115, 22)',
-        backgroundColor: 'rgba(249, 115, 22, 0.1)',
-        tension: 0.3,
-        pointRadius: 3,
-        pointHoverRadius: 6,
-        fill: true,
-      }]
+    const datasets: { data: { x: Date; y: number }[]; [key: string]: unknown }[] = [{
+      label: 'ELO Rating',
+      data,
+      borderColor: 'rgb(249, 115, 22)',
+      backgroundColor: 'rgba(249, 115, 22, 0.1)',
+      tension: 0.3,
+      pointRadius: 3,
+      pointHoverRadius: 6,
+      fill: true,
+    }]
+
+    // Linear regression trend line (least squares over time)
+    if (data.length >= 2) {
+      const n = data.length
+      const xs = data.map(p => p.x.getTime())
+      const ys = data.map(p => p.y)
+      const meanX = xs.reduce((s, v) => s + v, 0) / n
+      const meanY = ys.reduce((s, v) => s + v, 0) / n
+      let num = 0
+      let den = 0
+      for (let i = 0; i < n; i++) {
+        num += (xs[i] - meanX) * (ys[i] - meanY)
+        den += (xs[i] - meanX) ** 2
+      }
+      const slope = den === 0 ? 0 : num / den
+      const intercept = meanY - slope * meanX
+      const trendData = [
+        { x: data[0].x, y: Math.round(slope * xs[0] + intercept) },
+        { x: data[n - 1].x, y: Math.round(slope * xs[n - 1] + intercept) },
+      ]
+      const trendUp = slope >= 0
+      datasets.push({
+        label: 'Trend',
+        data: trendData,
+        borderColor: trendUp ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
+        borderDash: [6, 6],
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false,
+        tension: 0,
+      })
     }
+
+    return { datasets }
   }, [eloHistory])
 
   const chartOptions = {
