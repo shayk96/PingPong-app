@@ -263,10 +263,9 @@ export default function Leaderboard() {
           name,
           avgLucky,
           avgUnlucky,
-          avgTotal: Math.round((avgLucky + avgUnlucky) * 100) / 100,
+          avgTotal: Math.round((avgLucky - avgUnlucky) * 100) / 100,
         }
       })
-      .filter(e => e.avgTotal > 0)
       .sort((a, b) => b.avgTotal - a.avgTotal)
   }, [luckyLeaderboard, unluckyLeaderboard])
 
@@ -1035,14 +1034,14 @@ export default function Leaderboard() {
                       <span className="text-sm text-red-400/80 text-right">
                         {entry.avgUnlucky}
                       </span>
-                      <span className={`text-sm font-bold text-right ${i === 0 ? 'text-accent' : 'text-accent/80'}`}>
-                        {entry.avgTotal}
+                      <span className={`text-sm font-bold text-right ${entry.avgTotal >= 0 ? 'text-success' : 'text-error'}`}>
+                        {entry.avgTotal > 0 ? '+' : ''}{entry.avgTotal}
                       </span>
                     </div>
                   ))}
                 </div>
                 <p className="text-[10px] text-gray-500 px-3">
-                  Total = avg lucky + avg unlucky (conceded) per game
+                  Total = avg lucky − avg unlucky (conceded) per game
                 </p>
               </>
             ) : (
