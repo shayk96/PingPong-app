@@ -285,7 +285,7 @@ export default function PlayerProfile() {
     responsive: true,
     maintainAspectRatio: false,
     layout: {
-      padding: { right: 12, left: 4, top: 4 },
+      padding: { right: 24, left: 6, top: 6, bottom: 2 },
     },
     plugins: {
       legend: { display: false },
@@ -312,11 +312,12 @@ export default function PlayerProfile() {
     scales: {
       x: {
         type: 'time' as const,
+        offset: true,
         time: {
           displayFormats: { day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' },
           tooltipFormat: 'MMM d, yyyy',
         },
-        ticks: { color: '#9ca3af', maxRotation: 45, autoSkip: true, maxTicksLimit: 10 },
+        ticks: { color: '#9ca3af', maxRotation: 45, autoSkip: true, maxTicksLimit: 10, includeBounds: true },
         grid: { color: 'rgba(75, 75, 75, 0.3)' },
       },
       y: {

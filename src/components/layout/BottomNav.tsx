@@ -7,7 +7,7 @@ export function BottomNav() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches') || location.pathname.startsWith('/room') || location.pathname.startsWith('/daily')
+  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches') || location.pathname.startsWith('/room') || location.pathname.startsWith('/daily') || location.pathname.startsWith('/scoreboard')
 
   // Close menu on outside click
   useEffect(() => {
@@ -53,6 +53,16 @@ export function BottomNav() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
                   Daily Ranking
+                </button>
+                <div className="h-px bg-background-lighter" />
+                <button
+                  onClick={() => navigate('/scoreboard')}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-200 hover:bg-background-lighter transition-colors"
+                >
+                  <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                  </svg>
+                  Scoreboard by Date
                 </button>
                 <div className="h-px bg-background-lighter" />
                 <button

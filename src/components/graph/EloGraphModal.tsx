@@ -281,7 +281,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
     responsive: true,
     maintainAspectRatio: false,
     layout: {
-      padding: { right: 12, left: 4, top: 4 },
+      padding: { right: 24, left: 6, top: 6, bottom: 2 },
     },
     plugins: {
       legend: {
@@ -325,6 +325,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
     scales: {
       x: {
         type: 'time' as const,
+        offset: true,
         time: {
           displayFormats: {
             day: 'MMM d',
@@ -339,6 +340,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
           minRotation: 0,
           autoSkip: true,
           maxTicksLimit: 12,
+          includeBounds: true,
         },
         grid: { color: 'rgba(75, 75, 75, 0.3)' },
         title: {

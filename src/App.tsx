@@ -6,6 +6,7 @@ import PlayerProfile from './pages/PlayerProfile'
 import AllMatches from './pages/AllMatches'
 import RoomSession from './pages/RoomSession'
 import DailyRanking from './pages/DailyRanking'
+import RangeScoreboard from './pages/RangeScoreboard'
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Route path="matches" element={<AllMatches />} />
         <Route path="room" element={<RoomSession />} />
         <Route path="daily" element={<DailyRanking />} />
+        <Route path="scoreboard" element={<RangeScoreboard />} />
       </Route>
       
       {/* Catch all */}
