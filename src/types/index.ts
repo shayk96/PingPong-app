@@ -19,6 +19,8 @@ export interface StreakRecord {
   length: number
   startDate: Date | null
   endDate: Date | null
+  /** IDs of the matches that make up this streak, in chronological order */
+  matchIds: string[]
 }
 
 export interface UserStats {

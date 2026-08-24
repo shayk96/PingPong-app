@@ -19,7 +19,7 @@ export interface PlayerStreaks {
   longestLoss: StreakRecord
 }
 
-const EMPTY_RECORD: StreakRecord = { length: 0, startDate: null, endDate: null }
+const emptyRecord = (): StreakRecord => ({ length: 0, startDate: null, endDate: null, matchIds: [] })
 
 function sortAsc(matches: Match[]): Match[] {
   return [...matches].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
@@ -34,19 +34,20 @@ export function computePlayerStreaks(matches: Match[], playerId: string): Player
     matches.filter(m => m.winnerId === playerId || m.loserId === playerId)
   )
 
-  let longestWin: StreakRecord = { ...EMPTY_RECORD }
-  let longestLoss: StreakRecord = { ...EMPTY_RECORD }
+  let longestWin: StreakRecord = emptyRecord()
+  let longestLoss: StreakRecord = emptyRecord()
 
   let runType: 'win' | 'loss' | null = null
   let runLen = 0
   let runStart: Date | null = null
   let runEnd: Date | null = null
+  let runIds: string[] = []
 
   const flush = () => {
     if (runType === 'win' && runLen > longestWin.length) {
-      longestWin = { length: runLen, startDate: runStart, endDate: runEnd }
+      longestWin = { length: runLen, startDate: runStart, endDate: runEnd, matchIds: [...runIds] }
     } else if (runType === 'loss' && runLen > longestLoss.length) {
-      longestLoss = { length: runLen, startDate: runStart, endDate: runEnd }
+      longestLoss = { length: runLen, startDate: runStart, endDate: runEnd, matchIds: [...runIds] }
     }
   }
 
@@ -56,12 +57,14 @@ export function computePlayerStreaks(matches: Match[], playerId: string): Player
     if (type === runType) {
       runLen++
       runEnd = date
+      runIds.push(m.id)
     } else {
       flush()
       runType = type
       runLen = 1
       runStart = date
       runEnd = date
+      runIds = [m.id]
     }
   }
   flush()

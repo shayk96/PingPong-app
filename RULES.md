@@ -13,12 +13,12 @@ A competitive ping pong tracking app with an ELO-based ranking system. Track mat
 ### Star Tiers
 | ELO Range | Stars |
 |-----------|-------|
-| 1100+ | ⭐⭐⭐⭐⭐ |
-| 1000-1099 | ⭐⭐⭐⭐ |
-| 900-999 | ⭐⭐⭐ |
-| 850-899 | ⭐⭐ |
-| 800-849 | ⭐ |
-| Below 800 | ☆ |
+| 1050+ | ⭐⭐⭐⭐⭐ |
+| 850-1049 | ⭐⭐⭐⭐ |
+| 750-849 | ⭐⭐⭐ |
+| 650-749 | ⭐⭐ |
+| 550-649 | ⭐ |
+| Below 550 | ☆ |
 
 ### How ELO Changes
 

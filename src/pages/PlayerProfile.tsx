@@ -94,6 +94,7 @@ export default function PlayerProfile() {
   const [rangeFrom, setRangeFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
   const [rangeTo, setRangeTo] = useState<Date>(() => new Date())
   const [showSlope, setShowSlope] = useState(false)
+  const [streakModal, setStreakModal] = useState<'win' | 'loss' | null>(null)
   const [h2hOpponent, setH2hOpponent] = useState<{ id: string; name: string } | null>(null)
   const [h2hRange, setH2hRange] = useState<'all' | '1d' | '7d' | '30d' | 'custom'>('all')
   const [h2hFrom, setH2hFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
@@ -164,6 +165,16 @@ export default function PlayerProfile() {
     if (!h2hOpponent || !id) return null
     return computeH2HStats(matches, id, player?.displayName || 'You', h2hOpponent.id, h2hOpponent.name)
   }, [matches, id, player?.displayName, h2hOpponent])
+
+  // Games that make up the selected longest streak, in chronological order
+  const streakGames = useMemo(() => {
+    if (!streakModal) return []
+    const record = streakModal === 'win' ? stats.longestWinStreak : stats.longestLossStreak
+    const ids = new Set(record.matchIds)
+    return playerMatches
+      .filter(m => ids.has(m.id))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  }, [streakModal, stats.longestWinStreak, stats.longestLossStreak, playerMatches])
 
   // Recent form (last 10)
   const recentForm = useMemo(() => {
@@ -591,7 +602,11 @@ export default function PlayerProfile() {
       {/* Best streaks (all-time record) */}
       {(stats.longestWinStreak.length > 0 || stats.longestLossStreak.length > 0) && (
         <div className="grid grid-cols-2 gap-2 mb-4">
-          <div className="bg-background-light rounded-xl p-3 border border-success/20">
+          <button
+            onClick={() => stats.longestWinStreak.length > 0 && setStreakModal('win')}
+            disabled={stats.longestWinStreak.length === 0}
+            className="text-left bg-background-light rounded-xl p-3 border border-success/20 hover:border-success/50 transition-colors active:scale-[0.99] disabled:cursor-default disabled:hover:border-success/20"
+          >
             <div className="flex items-center gap-1.5 mb-1">
               <span className="text-base leading-none">🔥</span>
               <span className="text-xs text-gray-400">Longest Win Streak</span>
@@ -605,8 +620,12 @@ export default function PlayerProfile() {
                 {formatStreakDates(stats.longestWinStreak.startDate, stats.longestWinStreak.endDate)}
               </div>
             )}
-          </div>
-          <div className="bg-background-light rounded-xl p-3 border border-error/20">
+          </button>
+          <button
+            onClick={() => stats.longestLossStreak.length > 0 && setStreakModal('loss')}
+            disabled={stats.longestLossStreak.length === 0}
+            className="text-left bg-background-light rounded-xl p-3 border border-error/20 hover:border-error/50 transition-colors active:scale-[0.99] disabled:cursor-default disabled:hover:border-error/20"
+          >
             <div className="flex items-center gap-1.5 mb-1">
               <span className="text-base leading-none">🧊</span>
               <span className="text-xs text-gray-400">Longest Loss Streak</span>
@@ -620,7 +639,7 @@ export default function PlayerProfile() {
                 {formatStreakDates(stats.longestLossStreak.startDate, stats.longestLossStreak.endDate)}
               </div>
             )}
-          </div>
+          </button>
         </div>
       )}
 
@@ -1059,6 +1078,78 @@ export default function PlayerProfile() {
             )}
           </div>
         </div>
+      </Modal>
+
+      {/* Longest streak games modal */}
+      <Modal
+        isOpen={streakModal !== null}
+        onClose={() => setStreakModal(null)}
+        title={streakModal === 'win' ? '🔥 Longest Win Streak' : '🧊 Longest Loss Streak'}
+        maxWidth="lg"
+      >
+        {(() => {
+          const record = streakModal === 'win' ? stats.longestWinStreak : stats.longestLossStreak
+          const totalElo = streakGames.reduce((s, m) => s + m.eloDelta, 0)
+          return (
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="flex items-center justify-between bg-background rounded-xl p-3">
+                <div>
+                  <div className={`text-2xl font-display font-bold ${streakModal === 'win' ? 'text-success' : 'text-error'}`}>
+                    {record.length}
+                    <span className="text-sm font-medium text-gray-400 ml-1">
+                      {streakModal === 'win' ? 'wins' : 'losses'} in a row
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">
+                    {formatStreakDates(record.startDate, record.endDate)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className={`text-lg font-bold ${totalElo > 0 ? 'text-success' : totalElo < 0 ? 'text-error' : 'text-gray-400'}`}>
+                    {formatEloDelta(totalElo)}
+                  </div>
+                  <div className="text-[11px] text-gray-500">total ELO</div>
+                </div>
+              </div>
+
+              {/* Games in the streak */}
+              <div className="space-y-2 max-h-[55vh] overflow-y-auto">
+                {streakGames.map((match, i) => (
+                  <div
+                    key={match.id}
+                    className={`p-3 rounded-xl border ${
+                      match.isWin ? 'bg-success/5 border-success/20' : 'bg-error/5 border-error/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="text-xs font-bold text-gray-500 w-5 flex-shrink-0">#{i + 1}</span>
+                        <div className="min-w-0">
+                          <div className="text-white text-sm font-medium truncate">
+                            vs {match.opponent?.displayName || 'Unknown'}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {match.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {match.playerLucky > 0 && <span className="ml-2">🍀 {match.playerLucky}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-white font-bold text-sm">
+                          {match.playerScore}–{match.opponentScore}
+                        </div>
+                        <div className={`text-xs ${match.isWin ? 'text-success' : 'text-error'}`}>
+                          {formatEloDelta(match.eloDelta)} ELO
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
     </div>
   )

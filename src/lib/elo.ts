@@ -140,14 +140,20 @@ export function formatEloDelta(delta: number): string {
 
 /**
  * Get the rating tier as stars based on ELO
- * Adjusted for starting ELO of 800
+ *
+ * 1050+     → 5 stars
+ * 850–1050  → 4 stars
+ * 750–850   → 3 stars
+ * 650–750   → 2 stars
+ * 550–650   → 1 star
+ * below 550 → empty star
  */
 export function getRatingTier(rating: number): string {
-  if (rating >= 1100) return '⭐⭐⭐⭐⭐'
-  if (rating >= 1000) return '⭐⭐⭐⭐'
-  if (rating >= 900) return '⭐⭐⭐'
-  if (rating >= 850) return '⭐⭐'
-  if (rating >= 800) return '⭐'
+  if (rating >= 1050) return '⭐⭐⭐⭐⭐'
+  if (rating >= 850) return '⭐⭐⭐⭐'
+  if (rating >= 750) return '⭐⭐⭐'
+  if (rating >= 650) return '⭐⭐'
+  if (rating >= 550) return '⭐'
   return '☆'
 }
 
