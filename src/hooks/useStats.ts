@@ -5,6 +5,7 @@
 
 import { useMemo } from 'react'
 import type { Match, User, UserStats, OpponentStat, LeaderboardEntry } from '../types'
+import { computePlayerStreaks } from '../lib/streaks'
 
 /**
  * Calculate comprehensive stats for a single player
@@ -82,6 +83,9 @@ export function usePlayerStats(
     // Sort opponent stats by total games played
     opponentStats.sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses))
 
+    // Longest all-time win/loss streaks (with the dates they occurred)
+    const streaks = computePlayerStreaks(playerMatches, playerId)
+
     return {
       totalGames,
       wins,
@@ -89,6 +93,8 @@ export function usePlayerStats(
       winRate,
       currentStreak,
       streakType,
+      longestWinStreak: streaks.longestWin,
+      longestLossStreak: streaks.longestLoss,
       opponentStats
     }
   }, [playerId, matches, players])

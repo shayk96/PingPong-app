@@ -3,7 +3,7 @@
  * Detailed view of a player's stats, ELO graph, opponent breakdown, and match history
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Chart as ChartJS,
@@ -27,6 +27,7 @@ import { fetchEloHistory, EloHistoryEntry, renamePlayer } from '../lib/api'
 import { getRatingTier, formatEloDelta } from '../lib/elo'
 import { Button, Modal } from '../components/ui'
 import { EloGraphModal } from '../components/graph/EloGraphModal'
+import { computeH2HStats } from '../lib/streaks'
 
 function toInputDate(d: Date): string {
   const y = d.getFullYear()
@@ -38,6 +39,29 @@ function toInputDate(d: Date): string {
 function fromInputDate(s: string): Date {
   const [y, m, d] = s.split('-').map(Number)
   return new Date(y, m - 1, d)
+}
+
+function formatStreakDates(start: Date | null, end: Date | null): string {
+  if (!start) return ''
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
+  const s = start.toLocaleDateString('en-US', opts)
+  if (!end || start.toDateString() === end.toDateString()) return s
+  return `${s} – ${end.toLocaleDateString('en-US', opts)}`
+}
+
+function shortDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
+}
+
+/** A single comparison row in the head-to-head stats block. */
+function H2HStatRow({ label, left, right }: { label: string; left: ReactNode; right: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 py-1.5 border-t border-background-lighter/50">
+      <div className="text-left text-sm text-gray-200">{left}</div>
+      <div className="text-[10px] uppercase tracking-wide text-gray-500 text-center px-1">{label}</div>
+      <div className="text-right text-sm text-gray-200">{right}</div>
+    </div>
+  )
 }
 
 // Register Chart.js components
@@ -134,6 +158,12 @@ export default function PlayerProfile() {
     const wins = h2hMatches.filter(m => m.isWin).length
     return { wins, losses: h2hMatches.length - wins, total: h2hMatches.length }
   }, [h2hMatches])
+
+  // All-time head-to-head analytics (independent of the date filter)
+  const h2hStats = useMemo(() => {
+    if (!h2hOpponent || !id) return null
+    return computeH2HStats(matches, id, player?.displayName || 'You', h2hOpponent.id, h2hOpponent.name)
+  }, [matches, id, player?.displayName, h2hOpponent])
 
   // Recent form (last 10)
   const recentForm = useMemo(() => {
@@ -558,6 +588,42 @@ export default function PlayerProfile() {
         </div>
       </div>
 
+      {/* Best streaks (all-time record) */}
+      {(stats.longestWinStreak.length > 0 || stats.longestLossStreak.length > 0) && (
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <div className="bg-background-light rounded-xl p-3 border border-success/20">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-base leading-none">🔥</span>
+              <span className="text-xs text-gray-400">Longest Win Streak</span>
+            </div>
+            <div className="text-2xl font-display font-bold text-success">
+              {stats.longestWinStreak.length}
+              <span className="text-sm font-medium text-gray-400 ml-1">games</span>
+            </div>
+            {stats.longestWinStreak.startDate && (
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                {formatStreakDates(stats.longestWinStreak.startDate, stats.longestWinStreak.endDate)}
+              </div>
+            )}
+          </div>
+          <div className="bg-background-light rounded-xl p-3 border border-error/20">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-base leading-none">🧊</span>
+              <span className="text-xs text-gray-400">Longest Loss Streak</span>
+            </div>
+            <div className="text-2xl font-display font-bold text-error">
+              {stats.longestLossStreak.length}
+              <span className="text-sm font-medium text-gray-400 ml-1">games</span>
+            </div>
+            {stats.longestLossStreak.startDate && (
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                {formatStreakDates(stats.longestLossStreak.startDate, stats.longestLossStreak.endDate)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Perfect wins (11-0) */}
       {perfectWinsList.length > 0 && (
         <div className="mb-4 bg-background-light rounded-xl p-3 border border-accent/20">
@@ -883,6 +949,77 @@ export default function PlayerProfile() {
               </span>
             </div>
           </div>
+
+          {/* All-time head-to-head analytics */}
+          {h2hStats && h2hStats.total > 0 && (
+            <div className="bg-background rounded-xl p-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">All-time head-to-head</span>
+                <span className="text-[11px] text-gray-500">{h2hStats.total} games</span>
+              </div>
+
+              {/* Names + overall wins */}
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <span className="text-left text-sm font-semibold text-white truncate">{h2hStats.a.name}</span>
+                <span className="text-[10px] uppercase tracking-wide text-gray-500 text-center">wins</span>
+                <span className="text-right text-sm font-semibold text-white truncate">{h2hStats.b.name}</span>
+              </div>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-1">
+                <span className={`text-left text-2xl font-display font-bold ${h2hStats.a.wins >= h2hStats.b.wins ? 'text-success' : 'text-gray-400'}`}>{h2hStats.a.wins}</span>
+                <span className="text-gray-600 text-center">–</span>
+                <span className={`text-right text-2xl font-display font-bold ${h2hStats.b.wins >= h2hStats.a.wins ? 'text-success' : 'text-gray-400'}`}>{h2hStats.b.wins}</span>
+              </div>
+
+              <H2HStatRow
+                label="Longest win streak"
+                left={h2hStats.a.longestWinStreak.length > 0
+                  ? <span><span className="font-semibold text-white">{h2hStats.a.longestWinStreak.length}</span><span className="block text-[10px] text-gray-500">{formatStreakDates(h2hStats.a.longestWinStreak.startDate, h2hStats.a.longestWinStreak.endDate)}</span></span>
+                  : '—'}
+                right={h2hStats.b.longestWinStreak.length > 0
+                  ? <span><span className="font-semibold text-white">{h2hStats.b.longestWinStreak.length}</span><span className="block text-[10px] text-gray-500">{formatStreakDates(h2hStats.b.longestWinStreak.startDate, h2hStats.b.longestWinStreak.endDate)}</span></span>
+                  : '—'}
+              />
+
+              <H2HStatRow
+                label="Biggest win"
+                left={h2hStats.a.biggestWin
+                  ? <span><span className="font-semibold text-white">{h2hStats.a.biggestWin.playerScore}–{h2hStats.a.biggestWin.opponentScore}</span><span className="block text-[10px] text-gray-500">{shortDate(h2hStats.a.biggestWin.date)}</span></span>
+                  : '—'}
+                right={h2hStats.b.biggestWin
+                  ? <span><span className="font-semibold text-white">{h2hStats.b.biggestWin.playerScore}–{h2hStats.b.biggestWin.opponentScore}</span><span className="block text-[10px] text-gray-500">{shortDate(h2hStats.b.biggestWin.date)}</span></span>
+                  : '—'}
+              />
+
+              <H2HStatRow
+                label="Avg win margin"
+                left={h2hStats.a.wins > 0 ? `${h2hStats.a.avgWinMargin} pts` : '—'}
+                right={h2hStats.b.wins > 0 ? `${h2hStats.b.avgWinMargin} pts` : '—'}
+              />
+
+              <H2HStatRow
+                label="11-0 wins"
+                left={<span className="inline-flex items-center gap-1">{h2hStats.a.perfectWins > 0 && <span>🔫</span>}{h2hStats.a.perfectWins}</span>}
+                right={<span className="inline-flex items-center gap-1">{h2hStats.b.perfectWins}{h2hStats.b.perfectWins > 0 && <span>🔫</span>}</span>}
+              />
+
+              <H2HStatRow
+                label="Lucky pts (avg · total)"
+                left={<span>🍀 {h2hStats.a.avgLucky} · {h2hStats.a.totalLucky}</span>}
+                right={<span>{h2hStats.b.avgLucky} · {h2hStats.b.totalLucky} 🍀</span>}
+              />
+
+              {/* Close matches + overview */}
+              <div className="mt-2 pt-2 border-t border-background-lighter/50 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-400">
+                <span>
+                  <span className="text-gray-300 font-medium">{h2hStats.closeMatches}</span> close game{h2hStats.closeMatches !== 1 ? 's' : ''} (deuce)
+                  {h2hStats.closeMatches > 0 && (
+                    <span className="text-gray-500"> · {h2hStats.a.name} {h2hStats.closeWinsA} · {h2hStats.b.name} {h2hStats.closeWinsB}</span>
+                  )}
+                </span>
+                <span className="text-gray-500">avg {h2hStats.avgTotalPoints} pts/game</span>
+              </div>
+            </div>
+          )}
 
           {/* Game list */}
           <div className="space-y-2 max-h-[50vh] overflow-y-auto">

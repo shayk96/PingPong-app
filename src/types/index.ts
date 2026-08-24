@@ -15,6 +15,12 @@ export interface User {
   seasonWins?: number[] // Season numbers this player has won
 }
 
+export interface StreakRecord {
+  length: number
+  startDate: Date | null
+  endDate: Date | null
+}
+
 export interface UserStats {
   totalGames: number
   wins: number
@@ -22,6 +28,8 @@ export interface UserStats {
   winRate: number
   currentStreak: number
   streakType: 'win' | 'loss' | 'none'
+  longestWinStreak: StreakRecord
+  longestLossStreak: StreakRecord
   opponentStats: OpponentStat[]
 }
 

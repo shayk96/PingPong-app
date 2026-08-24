@@ -2,6 +2,11 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { LeaderboardEntry, Match } from '../../types'
 import { getRatingTier } from '../../lib/elo'
+import { computeCurrentStreaks } from '../../lib/streaks'
+
+// Streak thresholds for hot/cold badges
+const FIRE_MIN = 6 // winning streak of over 5 games
+const ICE_MIN = 5  // losing streak of 5+ games
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[]
@@ -23,6 +28,9 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
     }
     return map
   }, [matches])
+
+  // Current win/loss streak per player (for Fire/Ice badges)
+  const streakMap = useMemo(() => computeCurrentStreaks(matches), [matches])
 
   // Today's ELO delta per player
   const todayDeltaMap = useMemo(() => {
@@ -51,6 +59,9 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
       {entries.map((entry, index) => {
         const pw = perfectWinsMap.get(entry.user.id) || 0
         const todayDelta = todayDeltaMap.get(entry.user.id) || 0
+        const streak = streakMap.get(entry.user.id)
+        const onFire = streak?.type === 'win' && streak.length >= FIRE_MIN
+        const onIce = streak?.type === 'loss' && streak.length >= ICE_MIN
         return (
           <div
             key={entry.user.id}
@@ -74,6 +85,24 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
                   >
                     <span className="text-sm leading-none">🔫</span>
                     <span className="text-[10px] font-bold text-accent">{pw}</span>
+                  </span>
+                )}
+                {onFire && (
+                  <span
+                    className="inline-flex items-center gap-0.5 flex-shrink-0"
+                    title={`On fire — ${streak!.length} wins in a row`}
+                  >
+                    <span className="text-sm leading-none">🔥</span>
+                    <span className="text-[10px] font-bold text-orange-400">{streak!.length}</span>
+                  </span>
+                )}
+                {onIce && (
+                  <span
+                    className="inline-flex items-center gap-0.5 flex-shrink-0"
+                    title={`Ice cold — ${streak!.length} losses in a row`}
+                  >
+                    <span className="text-sm leading-none">🧊</span>
+                    <span className="text-[10px] font-bold text-sky-400">{streak!.length}</span>
                   </span>
                 )}
               </div>
