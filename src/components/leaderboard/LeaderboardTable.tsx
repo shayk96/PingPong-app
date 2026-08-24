@@ -66,7 +66,7 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
           <div
             key={entry.user.id}
             onClick={() => navigate(`/player/${entry.user.id}`)}
-            className="flex items-center gap-2 p-3 rounded-xl border border-transparent hover:border-background-lighter transition-all duration-200 cursor-pointer active:scale-[0.99] bg-background-light"
+            className="flex items-center gap-2 p-3 pr-2 rounded-xl border border-transparent hover:border-background-lighter transition-all duration-200 cursor-pointer active:scale-[0.99] bg-background-light"
             style={{ animationDelay: `${index * 50}ms` }}
           >
             {/* Rank */}
@@ -117,17 +117,14 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
               </div>
             </div>
 
-            {/* Stats column */}
-            <div className="flex-shrink-0 text-center px-2">
-              <div className="text-xs">
-                <span className="text-success">{entry.wins}W</span>
-                {' '}
-                <span className="text-error">{entry.losses}L</span>
-              </div>
+            {/* Stats column — stacked so the name keeps more room on narrow screens */}
+            <div className="flex-shrink-0 text-right leading-tight">
+              <div className="text-xs text-success">{entry.wins}W</div>
+              <div className="text-xs text-error">{entry.losses}L</div>
             </div>
 
             {/* ELO */}
-            <div className="flex-shrink-0 w-16 text-right">
+            <div className="flex-shrink-0 w-14 text-right">
               <div className="font-display font-bold text-lg text-white">
                 {entry.user.eloRating}
               </div>
@@ -145,7 +142,7 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
                   e.stopPropagation()
                   onDeletePlayer(entry.user.id, entry.user.displayName)
                 }}
-                className="flex-shrink-0 p-2 text-gray-500 hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+                className="flex-shrink-0 p-1.5 text-gray-500 hover:text-error hover:bg-error/10 rounded-lg transition-colors"
                 title="Delete player"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
