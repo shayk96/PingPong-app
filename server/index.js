@@ -147,9 +147,14 @@ function isPlayerInactive(lastPlayedAt) {
 
 // ============ Auto Season End ============
 
-// Season end dates by season number
+// Season end dates by season number (end of the given day, inclusive)
 const SEASON_END_DATES = {
-  1: new Date('2026-09-26T00:00:00'),
+  1: new Date('2026-09-24T23:59:59'),
+  2: new Date('2026-12-24T23:59:59'),
+  3: new Date('2027-03-25T23:59:59'),
+  4: new Date('2027-06-17T23:59:59'),
+  5: new Date('2027-09-23T23:59:59'),
+  6: new Date('2027-12-23T23:59:59'),
 }
 
 /**
@@ -1364,9 +1369,13 @@ async function ensureSeasonExists() {
     if (!lastSeason) {
       await Match.updateMany({ seasonNumber: { $exists: false } }, { $set: { seasonNumber: 1 } })
     }
-  } else if (!activeSeason.endsAt && SEASON_END_DATES[activeSeason.seasonNumber]) {
-    activeSeason.endsAt = SEASON_END_DATES[activeSeason.seasonNumber]
-    await activeSeason.save()
+  } else if (SEASON_END_DATES[activeSeason.seasonNumber]) {
+    // Keep the active season's end date in sync with the configured schedule
+    const configured = SEASON_END_DATES[activeSeason.seasonNumber]
+    if (!activeSeason.endsAt || new Date(activeSeason.endsAt).getTime() !== configured.getTime()) {
+      activeSeason.endsAt = configured
+      await activeSeason.save()
+    }
   }
 }
 

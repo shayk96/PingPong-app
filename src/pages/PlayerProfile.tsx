@@ -25,7 +25,7 @@ import { useMatches } from '../hooks/useMatches'
 import { usePlayerStats, useLeaderboard } from '../hooks/useStats'
 import { fetchEloHistory, EloHistoryEntry, renamePlayer } from '../lib/api'
 import { getRatingTier, formatEloDelta } from '../lib/elo'
-import { Button } from '../components/ui'
+import { Button, Modal } from '../components/ui'
 import { EloGraphModal } from '../components/graph/EloGraphModal'
 
 function toInputDate(d: Date): string {
@@ -70,6 +70,10 @@ export default function PlayerProfile() {
   const [rangeFrom, setRangeFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
   const [rangeTo, setRangeTo] = useState<Date>(() => new Date())
   const [showSlope, setShowSlope] = useState(false)
+  const [h2hOpponent, setH2hOpponent] = useState<{ id: string; name: string } | null>(null)
+  const [h2hRange, setH2hRange] = useState<'all' | '1d' | '7d' | '30d' | 'custom'>('all')
+  const [h2hFrom, setH2hFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+  const [h2hTo, setH2hTo] = useState<Date>(() => new Date())
   const editInputRef = useRef<HTMLInputElement>(null)
   const chartRef = useRef<any>(null)
 
@@ -109,6 +113,27 @@ export default function PlayerProfile() {
         playerLucky: m.playerAId === id ? (m.playerALuckyPoints || 0) : (m.playerBLuckyPoints || 0),
       }))
   }, [id, matches, players])
+
+  // Head-to-head games vs the selected opponent, filtered by the chosen date range
+  const h2hMatches = useMemo(() => {
+    if (!h2hOpponent) return []
+    let list = playerMatches.filter(m => m.opponent?.id === h2hOpponent.id)
+    if (h2hRange === 'custom') {
+      const start = new Date(h2hFrom.getFullYear(), h2hFrom.getMonth(), h2hFrom.getDate()).getTime()
+      const end = new Date(h2hTo.getFullYear(), h2hTo.getMonth(), h2hTo.getDate(), 23, 59, 59, 999).getTime()
+      list = list.filter(m => m.createdAt.getTime() >= start && m.createdAt.getTime() <= end)
+    } else if (h2hRange !== 'all') {
+      const days = h2hRange === '1d' ? 1 : h2hRange === '7d' ? 7 : 30
+      const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+      list = list.filter(m => m.createdAt.getTime() >= cutoff)
+    }
+    return list
+  }, [h2hOpponent, playerMatches, h2hRange, h2hFrom, h2hTo])
+
+  const h2hRecord = useMemo(() => {
+    const wins = h2hMatches.filter(m => m.isWin).length
+    return { wins, losses: h2hMatches.length - wins, total: h2hMatches.length }
+  }, [h2hMatches])
 
   // Recent form (last 10)
   const recentForm = useMemo(() => {
@@ -695,12 +720,18 @@ export default function PlayerProfile() {
               const winPct = total > 0 ? (opp.wins / total) * 100 : 0
 
               return (
-                <div
+                <button
                   key={opp.opponentId}
-                  className="bg-background-light rounded-xl p-3 border border-background-lighter"
+                  onClick={() => { setH2hOpponent({ id: opp.opponentId, name: opp.opponentName }); setH2hRange('all') }}
+                  className="w-full text-left bg-background-light rounded-xl p-3 border border-background-lighter hover:border-accent/40 transition-colors active:scale-[0.99]"
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-medium text-white text-sm truncate">{opp.opponentName}</span>
+                    <span className="font-medium text-white text-sm truncate flex items-center gap-1.5">
+                      {opp.opponentName}
+                      <svg className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </span>
                     <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
                       {total} game{total !== 1 ? 's' : ''}
                     </span>
@@ -715,7 +746,7 @@ export default function PlayerProfile() {
                     <span className="text-success">{opp.wins}W</span>
                     <span className="text-error">{opp.losses}L</span>
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>
@@ -785,6 +816,113 @@ export default function PlayerProfile() {
         players={players}
         initialPlayerIds={id ? [id] : []}
       />
+
+      {/* Head-to-head history modal */}
+      <Modal
+        isOpen={h2hOpponent !== null}
+        onClose={() => setH2hOpponent(null)}
+        title={h2hOpponent ? `${player?.displayName || 'Player'} vs ${h2hOpponent.name}` : ''}
+        maxWidth="lg"
+      >
+        <div className="space-y-4">
+          {/* Date range selector */}
+          <div className="flex gap-1 p-1 bg-background rounded-lg">
+            {([
+              { id: 'all', label: 'All' },
+              { id: '30d', label: '1M' },
+              { id: '7d', label: '1W' },
+              { id: '1d', label: '1D' },
+              { id: 'custom', label: 'Custom' },
+            ] as const).map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setH2hRange(opt.id)}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  h2hRange === opt.id ? 'bg-accent text-white' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {h2hRange === 'custom' && (
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <label className="block text-[10px] uppercase tracking-wide text-gray-500 mb-1">From</label>
+                <input
+                  type="date"
+                  value={toInputDate(h2hFrom)}
+                  max={toInputDate(h2hTo)}
+                  onChange={(e) => e.target.value && setH2hFrom(fromInputDate(e.target.value))}
+                  className="w-full px-2 py-1.5 rounded-lg bg-background border border-background-lighter text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[10px] uppercase tracking-wide text-gray-500 mb-1">To</label>
+                <input
+                  type="date"
+                  value={toInputDate(h2hTo)}
+                  min={toInputDate(h2hFrom)}
+                  onChange={(e) => e.target.value && setH2hTo(fromInputDate(e.target.value))}
+                  className="w-full px-2 py-1.5 rounded-lg bg-background border border-background-lighter text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Record summary */}
+          <div className="flex items-center justify-between bg-background rounded-xl p-3">
+            <div className="text-sm text-gray-400">
+              {h2hRecord.total} game{h2hRecord.total !== 1 ? 's' : ''}
+            </div>
+            <div className="flex items-center gap-3 text-sm font-semibold">
+              <span className="text-success">{h2hRecord.wins}W</span>
+              <span className="text-error">{h2hRecord.losses}L</span>
+              <span className="text-gray-300">
+                {h2hRecord.total > 0 ? Math.round((h2hRecord.wins / h2hRecord.total) * 100) : 0}%
+              </span>
+            </div>
+          </div>
+
+          {/* Game list */}
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+            {h2hMatches.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-8">No games in this range</p>
+            ) : (
+              h2hMatches.map(match => (
+                <div
+                  key={match.id}
+                  className={`p-3 rounded-xl border ${
+                    match.isWin ? 'bg-success/5 border-success/20' : 'bg-error/5 border-error/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className={`text-sm font-bold w-5 ${match.isWin ? 'text-success' : 'text-error'}`}>
+                        {match.isWin ? 'W' : 'L'}
+                      </span>
+                      <div className="text-xs text-gray-400">
+                        {match.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {(match.playerLucky > 0) && (
+                          <span className="ml-2 text-gray-500">🍀 {match.playerLucky}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-white font-bold text-sm">
+                        {match.playerScore}–{match.opponentScore}
+                      </div>
+                      <div className={`text-xs ${match.isWin ? 'text-success' : 'text-error'}`}>
+                        {formatEloDelta(match.eloDelta)} ELO
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

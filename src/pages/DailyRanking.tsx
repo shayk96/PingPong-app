@@ -15,10 +15,10 @@ function addDays(d: Date, n: number): Date {
   return r
 }
 
-function getMonday(d: Date): Date {
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  return addDays(startOfDay(d), diff)
+// Start of the week (Sunday)
+function getWeekStart(d: Date): Date {
+  const day = d.getDay() // 0 = Sunday
+  return addDays(startOfDay(d), -day)
 }
 
 function formatDateShort(d: Date): string {
@@ -69,8 +69,8 @@ export default function DailyRanking() {
       return { rangeStart: startOfDay(rangeFrom), rangeEnd: addDays(startOfDay(rangeTo), 1) }
     }
     if (viewMode === 'week') {
-      const monday = getMonday(selectedDate)
-      return { rangeStart: monday, rangeEnd: addDays(monday, 7) }
+      const weekStart = getWeekStart(selectedDate)
+      return { rangeStart: weekStart, rangeEnd: addDays(weekStart, 7) }
     }
     const day = startOfDay(selectedDate)
     return { rangeStart: day, rangeEnd: addDays(day, 1) }
@@ -120,7 +120,7 @@ export default function DailyRanking() {
   }
 
   const isToday = startOfDay(selectedDate).getTime() === today.getTime()
-  const isCurrentWeek = viewMode === 'week' && getMonday(selectedDate).getTime() === getMonday(today).getTime()
+  const isCurrentWeek = viewMode === 'week' && getWeekStart(selectedDate).getTime() === getWeekStart(today).getTime()
   const canGoForward = viewMode === 'day' ? !isToday : viewMode === 'week' ? !isCurrentWeek : false
 
   const headerLabel = viewMode === 'range'
