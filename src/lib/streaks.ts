@@ -106,6 +106,10 @@ export interface H2HSide {
   avgLucky: number
   perfectWins: number // 11-0 wins
   avgWinMargin: number
+  /** Net ELO gained/lost against this specific opponent */
+  netElo: number
+  /** Total game points scored against this opponent */
+  pointsScored: number
 }
 
 export interface H2HStats {
@@ -152,7 +156,14 @@ function buildSide(pairMatches: Match[], playerId: string, name: string): H2HSid
     }
   }
 
-  const totalLucky = pairMatches.reduce((s, m) => s + luckyFor(m, playerId), 0)
+  let totalLucky = 0
+  let netElo = 0
+  let pointsScored = 0
+  for (const m of pairMatches) {
+    totalLucky += luckyFor(m, playerId)
+    netElo += m.winnerId === playerId ? m.winnerEloDelta : m.loserEloDelta
+    pointsScored += scoreFor(m, playerId)
+  }
 
   return {
     playerId,
@@ -164,6 +175,8 @@ function buildSide(pairMatches: Match[], playerId: string, name: string): H2HSid
     avgLucky: pairMatches.length > 0 ? Math.round((totalLucky / pairMatches.length) * 100) / 100 : 0,
     perfectWins,
     avgWinMargin: wins.length > 0 ? Math.round((marginSum / wins.length) * 10) / 10 : 0,
+    netElo,
+    pointsScored,
   }
 }
 

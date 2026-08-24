@@ -1010,6 +1010,18 @@ export default function PlayerProfile() {
               />
 
               <H2HStatRow
+                label="ELO from matchup"
+                left={<span className={`font-semibold ${h2hStats.a.netElo > 0 ? 'text-success' : h2hStats.a.netElo < 0 ? 'text-error' : 'text-gray-400'}`}>{formatEloDelta(h2hStats.a.netElo)}</span>}
+                right={<span className={`font-semibold ${h2hStats.b.netElo > 0 ? 'text-success' : h2hStats.b.netElo < 0 ? 'text-error' : 'text-gray-400'}`}>{formatEloDelta(h2hStats.b.netElo)}</span>}
+              />
+
+              <H2HStatRow
+                label="Total points scored"
+                left={h2hStats.a.pointsScored}
+                right={h2hStats.b.pointsScored}
+              />
+
+              <H2HStatRow
                 label="Avg win margin"
                 left={h2hStats.a.wins > 0 ? `${h2hStats.a.avgWinMargin} pts` : '—'}
                 right={h2hStats.b.wins > 0 ? `${h2hStats.b.avgWinMargin} pts` : '—'}
