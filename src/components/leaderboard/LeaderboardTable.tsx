@@ -76,33 +76,39 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
 
             {/* Player info */}
             <div className="flex-1 min-w-0">
-              <div className={`font-semibold truncate flex items-center gap-1.5 ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
-                {entry.user.displayName}
-                {pw > 0 && (
-                  <span
-                    className="inline-flex items-center gap-0.5 flex-shrink-0"
-                    title={`${pw} total 11-0 win${pw > 1 ? 's' : ''}`}
-                  >
-                    <span className="text-sm leading-none">🔫</span>
-                    <span className="text-[10px] font-bold text-accent">{pw}</span>
-                  </span>
-                )}
-                {onFire && (
-                  <span
-                    className="inline-flex items-center gap-0.5 flex-shrink-0"
-                    title={`On fire — ${streak!.length} wins in a row`}
-                  >
-                    <span className="text-sm leading-none">🔥</span>
-                    <span className="text-[10px] font-bold text-orange-400">{streak!.length}</span>
-                  </span>
-                )}
-                {onIce && (
-                  <span
-                    className="inline-flex items-center gap-0.5 flex-shrink-0"
-                    title={`Ice cold — ${streak!.length} losses in a row`}
-                  >
-                    <span className="text-sm leading-none">🧊</span>
-                    <span className="text-[10px] font-bold text-sky-400">{streak!.length}</span>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className={`font-semibold truncate min-w-0 ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
+                  {entry.user.displayName}
+                </span>
+                {(pw > 0 || onFire || onIce) && (
+                  <span className="flex items-center gap-1.5 flex-shrink-0">
+                    {pw > 0 && (
+                      <span
+                        className="inline-flex items-center gap-0.5"
+                        title={`${pw} total 11-0 win${pw > 1 ? 's' : ''}`}
+                      >
+                        <span className="text-sm leading-none">🔫</span>
+                        <span className="text-[10px] font-bold text-accent">{pw}</span>
+                      </span>
+                    )}
+                    {onFire && (
+                      <span
+                        className="inline-flex items-center gap-0.5"
+                        title={`On fire — ${streak!.length} wins in a row`}
+                      >
+                        <span className="text-sm leading-none">🔥</span>
+                        <span className="text-[10px] font-bold text-orange-400">{streak!.length}</span>
+                      </span>
+                    )}
+                    {onIce && (
+                      <span
+                        className="inline-flex items-center gap-0.5"
+                        title={`Ice cold — ${streak!.length} losses in a row`}
+                      >
+                        <span className="text-sm leading-none">🧊</span>
+                        <span className="text-[10px] font-bold text-sky-400">{streak!.length}</span>
+                      </span>
+                    )}
                   </span>
                 )}
               </div>

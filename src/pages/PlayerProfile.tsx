@@ -792,8 +792,8 @@ export default function PlayerProfile() {
                   className="w-full text-left bg-background-light rounded-xl p-3 border border-background-lighter hover:border-accent/40 transition-colors active:scale-[0.99]"
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-medium text-white text-sm truncate flex items-center gap-1.5">
-                      {opp.opponentName}
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-medium text-white text-sm truncate min-w-0">{opp.opponentName}</span>
                       <svg className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>

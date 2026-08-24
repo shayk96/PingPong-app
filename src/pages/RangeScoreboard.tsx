@@ -239,8 +239,8 @@ export default function RangeScoreboard() {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-white truncate flex items-center gap-1.5">
-                    <span className="truncate">{entry.name}</span>
+                  <div className="font-semibold text-white flex items-center gap-1.5 min-w-0">
+                    <span className="truncate min-w-0">{entry.name}</span>
                     {entry.games < MIN_GAMES_ACTIVE && (
                       <span className="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-600/40 text-gray-400">
                         provisional
