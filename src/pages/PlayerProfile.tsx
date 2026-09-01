@@ -28,6 +28,7 @@ import { getRatingTier, formatEloDelta } from '../lib/elo'
 import { Button, Modal } from '../components/ui'
 import { EloGraphModal } from '../components/graph/EloGraphModal'
 import { computeH2HStats } from '../lib/streaks'
+import { computeEloPeriodRecords, type PeriodRecord } from '../lib/records'
 
 function toInputDate(d: Date): string {
   const y = d.getFullYear()
@@ -94,7 +95,12 @@ export default function PlayerProfile() {
   const [rangeFrom, setRangeFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
   const [rangeTo, setRangeTo] = useState<Date>(() => new Date())
   const [showSlope, setShowSlope] = useState(false)
-  const [streakModal, setStreakModal] = useState<'win' | 'loss' | null>(null)
+  const [gamesModal, setGamesModal] = useState<{
+    title: string
+    subtitle: string
+    matchIds: string[]
+    tone: 'success' | 'error'
+  } | null>(null)
   const [h2hOpponent, setH2hOpponent] = useState<{ id: string; name: string } | null>(null)
   const [h2hRange, setH2hRange] = useState<'all' | '1d' | '7d' | '30d' | 'custom'>('all')
   const [h2hFrom, setH2hFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
@@ -166,15 +172,20 @@ export default function PlayerProfile() {
     return computeH2HStats(matches, id, player?.displayName || 'You', h2hOpponent.id, h2hOpponent.name)
   }, [matches, id, player?.displayName, h2hOpponent])
 
-  // Games that make up the selected longest streak, in chronological order
-  const streakGames = useMemo(() => {
-    if (!streakModal) return []
-    const record = streakModal === 'win' ? stats.longestWinStreak : stats.longestLossStreak
-    const ids = new Set(record.matchIds)
+  // Best ELO gain per day / week / month (all-time personal records)
+  const eloRecords = useMemo(
+    () => (id ? computeEloPeriodRecords(matches, id) : { bestDay: null, bestWeek: null, bestMonth: null }),
+    [matches, id]
+  )
+
+  // Games behind whichever record/streak the user opened, in chronological order
+  const modalGames = useMemo(() => {
+    if (!gamesModal) return []
+    const ids = new Set(gamesModal.matchIds)
     return playerMatches
       .filter(m => ids.has(m.id))
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-  }, [streakModal, stats.longestWinStreak, stats.longestLossStreak, playerMatches])
+  }, [gamesModal, playerMatches])
 
   // Recent form (last 10)
   const recentForm = useMemo(() => {
@@ -603,7 +614,12 @@ export default function PlayerProfile() {
       {(stats.longestWinStreak.length > 0 || stats.longestLossStreak.length > 0) && (
         <div className="grid grid-cols-2 gap-2 mb-4">
           <button
-            onClick={() => stats.longestWinStreak.length > 0 && setStreakModal('win')}
+            onClick={() => stats.longestWinStreak.length > 0 && setGamesModal({
+              title: '🔥 Longest Win Streak',
+              subtitle: `${stats.longestWinStreak.length} wins in a row · ${formatStreakDates(stats.longestWinStreak.startDate, stats.longestWinStreak.endDate)}`,
+              matchIds: stats.longestWinStreak.matchIds,
+              tone: 'success',
+            })}
             disabled={stats.longestWinStreak.length === 0}
             className="text-left bg-background-light rounded-xl p-3 border border-success/20 hover:border-success/50 transition-colors active:scale-[0.99] disabled:cursor-default disabled:hover:border-success/20"
           >
@@ -622,7 +638,12 @@ export default function PlayerProfile() {
             )}
           </button>
           <button
-            onClick={() => stats.longestLossStreak.length > 0 && setStreakModal('loss')}
+            onClick={() => stats.longestLossStreak.length > 0 && setGamesModal({
+              title: '🧊 Longest Loss Streak',
+              subtitle: `${stats.longestLossStreak.length} losses in a row · ${formatStreakDates(stats.longestLossStreak.startDate, stats.longestLossStreak.endDate)}`,
+              matchIds: stats.longestLossStreak.matchIds,
+              tone: 'error',
+            })}
             disabled={stats.longestLossStreak.length === 0}
             className="text-left bg-background-light rounded-xl p-3 border border-error/20 hover:border-error/50 transition-colors active:scale-[0.99] disabled:cursor-default disabled:hover:border-error/20"
           >
@@ -640,6 +661,47 @@ export default function PlayerProfile() {
               </div>
             )}
           </button>
+        </div>
+      )}
+
+      {/* Best ELO gains by period (all-time personal bests) */}
+      {(eloRecords.bestDay || eloRecords.bestWeek || eloRecords.bestMonth) && (
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="text-base leading-none">📈</span>
+            <span className="text-sm font-semibold text-white">Best ELO Gain</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { key: 'day', label: 'Day', record: eloRecords.bestDay, fmt: (r: PeriodRecord) => shortDate(r.start) },
+              { key: 'week', label: 'Week', record: eloRecords.bestWeek, fmt: (r: PeriodRecord) => `${shortDate(r.start)} – ${shortDate(r.end)}` },
+              { key: 'month', label: 'Month', record: eloRecords.bestMonth, fmt: (r: PeriodRecord) => r.start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) },
+            ] as const).map(({ key, label, record, fmt }) => (
+              <button
+                key={key}
+                onClick={() => record && setGamesModal({
+                  title: `📈 Best ${label}`,
+                  subtitle: `${formatEloDelta(record.delta)} ELO over ${record.games} game${record.games !== 1 ? 's' : ''} · ${fmt(record)}`,
+                  matchIds: record.matchIds,
+                  tone: record.delta >= 0 ? 'success' : 'error',
+                })}
+                disabled={!record}
+                className="text-left bg-background-light rounded-xl p-3 border border-background-lighter hover:border-accent/50 transition-colors active:scale-[0.99] disabled:cursor-default disabled:hover:border-background-lighter"
+              >
+                <div className="text-xs text-gray-400 mb-0.5">{label}</div>
+                <div className={`text-xl font-display font-bold ${
+                  !record ? 'text-gray-500' : record.delta > 0 ? 'text-success' : record.delta < 0 ? 'text-error' : 'text-gray-300'
+                }`}>
+                  {record ? formatEloDelta(record.delta) : '—'}
+                </div>
+                {record && (
+                  <div className="text-[10px] text-gray-500 mt-0.5 leading-tight">
+                    {fmt(record)}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1092,42 +1154,40 @@ export default function PlayerProfile() {
         </div>
       </Modal>
 
-      {/* Longest streak games modal */}
+      {/* Games behind a streak / period record */}
       <Modal
-        isOpen={streakModal !== null}
-        onClose={() => setStreakModal(null)}
-        title={streakModal === 'win' ? '🔥 Longest Win Streak' : '🧊 Longest Loss Streak'}
+        isOpen={gamesModal !== null}
+        onClose={() => setGamesModal(null)}
+        title={gamesModal?.title || ''}
         maxWidth="lg"
       >
         {(() => {
-          const record = streakModal === 'win' ? stats.longestWinStreak : stats.longestLossStreak
-          const totalElo = streakGames.reduce((s, m) => s + m.eloDelta, 0)
+          const totalElo = modalGames.reduce((s, m) => s + m.eloDelta, 0)
+          const wins = modalGames.filter(m => m.isWin).length
           return (
             <div className="space-y-4">
               {/* Summary */}
-              <div className="flex items-center justify-between bg-background rounded-xl p-3">
-                <div>
-                  <div className={`text-2xl font-display font-bold ${streakModal === 'win' ? 'text-success' : 'text-error'}`}>
-                    {record.length}
-                    <span className="text-sm font-medium text-gray-400 ml-1">
-                      {streakModal === 'win' ? 'wins' : 'losses'} in a row
-                    </span>
+              <div className="flex items-center justify-between gap-3 bg-background rounded-xl p-3">
+                <div className="min-w-0">
+                  <div className={`text-2xl font-display font-bold ${gamesModal?.tone === 'error' ? 'text-error' : 'text-success'}`}>
+                    {modalGames.length}
+                    <span className="text-sm font-medium text-gray-400 ml-1">games</span>
                   </div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">
-                    {formatStreakDates(record.startDate, record.endDate)}
-                  </div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">{gamesModal?.subtitle}</div>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex-shrink-0">
                   <div className={`text-lg font-bold ${totalElo > 0 ? 'text-success' : totalElo < 0 ? 'text-error' : 'text-gray-400'}`}>
                     {formatEloDelta(totalElo)}
                   </div>
-                  <div className="text-[11px] text-gray-500">total ELO</div>
+                  <div className="text-[11px] text-gray-500">
+                    {wins}W {modalGames.length - wins}L
+                  </div>
                 </div>
               </div>
 
-              {/* Games in the streak */}
+              {/* Games */}
               <div className="space-y-2 max-h-[55vh] overflow-y-auto">
-                {streakGames.map((match, i) => (
+                {modalGames.map((match, i) => (
                   <div
                     key={match.id}
                     className={`p-3 rounded-xl border ${
