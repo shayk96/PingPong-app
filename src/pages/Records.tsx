@@ -118,9 +118,10 @@ export default function Records() {
       navigate(`/player/${holder.playerId}`)
       return
     }
+    const who = holder.opponentName ? `${holder.name} vs ${holder.opponentName}` : holder.name
     setGamesModal({
       title,
-      subtitle: `${holder.name} · ${holder.detail ?? holder.display}`,
+      subtitle: `${who} · ${holder.detail ?? holder.display}`,
       playerId: holder.playerId,
       matchIds: holder.matchIds,
       negative,
@@ -274,12 +275,14 @@ export default function Records() {
                       </span>
 
                       <div className="flex-1 min-w-0">
-                        <div
-                          className={`font-medium truncate ${
-                            i === 0 ? 'text-white' : 'text-gray-300'
-                          } ${i === 0 ? 'text-sm' : 'text-[13px]'}`}
-                        >
+                        <div className="text-sm font-medium text-white truncate">
                           {holder.name}
+                          {holder.opponentName && (
+                            <>
+                              <span className="text-gray-500 font-normal"> vs </span>
+                              {holder.opponentName}
+                            </>
+                          )}
                         </div>
                         {holder.detail && (
                           <div className="text-[11px] text-gray-500 truncate">{holder.detail}</div>
@@ -288,7 +291,7 @@ export default function Records() {
 
                       <span
                         className={`flex-shrink-0 font-display font-bold tabular-nums ${
-                          i === 0 ? 'text-lg' : 'text-sm'
+                          i === 0 ? 'text-base' : 'text-sm'
                         } ${
                           cat.negative
                             ? i === 0

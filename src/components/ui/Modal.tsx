@@ -4,6 +4,7 @@
  */
 
 import { ReactNode, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 interface ModalProps {
   isOpen: boolean
@@ -36,7 +37,10 @@ export function Modal({ isOpen, onClose, children, title, maxWidth = 'md' }: Mod
 
   if (!isOpen) return null
 
-  return (
+  // Portalled to the body: any ancestor with a transform (our page fade-in
+  // animation leaves one behind) would otherwise become the containing block
+  // for `fixed`, dropping the modal somewhere down the page instead of on screen.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
@@ -61,7 +65,8 @@ export function Modal({ isOpen, onClose, children, title, maxWidth = 'md' }: Mod
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

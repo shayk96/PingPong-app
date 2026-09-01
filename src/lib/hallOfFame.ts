@@ -349,7 +349,7 @@ export function computeHallOfFame(
           name: name(id),
           value: s.length,
           display: `${s.length}`,
-          detail: `vs ${name(oppId)} · ${fmtRange(s.startDate, s.endDate)}`,
+          detail: fmtRange(s.startDate, s.endDate),
           opponentName: name(oppId),
           matchIds: s.matchIds,
         })
@@ -475,7 +475,7 @@ export function computeHallOfFame(
         name: name(m.winnerId),
         value: gain,
         display: signed(gain),
-        detail: `beat ${name(m.loserId)} · ${fmtDay(asDate(m))}`,
+        detail: fmtDay(asDate(m)),
         opponentName: name(m.loserId),
         matchIds: [m.id],
       })
@@ -583,7 +583,7 @@ export function computeHallOfFame(
             name: name(id),
             value: lucky,
             display: `${lucky}`,
-            detail: `vs ${name(opponentOf(m, id))} · ${scoreFor(m, id)}–${scoreAgainst(m, id)} · ${fmtDay(asDate(m))}`,
+            detail: `${scoreFor(m, id)}–${scoreAgainst(m, id)} · ${fmtDay(asDate(m))}`,
             opponentName: name(opponentOf(m, id)),
             matchIds: [m.id],
           })
@@ -787,7 +787,7 @@ export function computeHallOfFame(
           name: name(id),
           value,
           display: `${wins}–${pm.length - wins}`,
-          detail: `vs ${name(oppId)} · ${Math.round(pct)}% win rate`,
+          detail: `${Math.round(pct)}% win rate over ${plural(pm.length, 'game')}`,
           opponentName: name(oppId),
           matchIds: pm.map(m => m.id),
         })
@@ -892,7 +892,7 @@ export function computeHallOfFame(
       name: name(leader),
       value: pm.length,
       display: `${pm.length}`,
-      detail: `vs ${name(other)} · leads ${leaderWins}–${pm.length - leaderWins}`,
+      detail: `leads ${leaderWins}–${pm.length - leaderWins}`,
       opponentName: name(other),
       matchIds: pm.map(m => m.id),
     })
