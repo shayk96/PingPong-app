@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -29,6 +29,19 @@ import { Button, Modal } from '../components/ui'
 import { EloGraphModal } from '../components/graph/EloGraphModal'
 import { computeH2HStats } from '../lib/streaks'
 import { computeEloPeriodRecords, type PeriodRecord } from '../lib/records'
+import { useSeason } from '../hooks/useSeason'
+import {
+  filterBySeason,
+  knownSeasonNumbers,
+  lastSeasonBadges,
+  matchSeason,
+  seasonStandings,
+  PODIUM_MEDALS,
+  type PodiumRank,
+  type SeasonFilterValue,
+} from '../lib/seasons'
+import { SeasonFilter } from '../components/season/SeasonFilter'
+import { SeasonBadgePill } from '../components/season/SeasonBadgePill'
 
 function toInputDate(d: Date): string {
   const y = d.getFullYear()
@@ -83,7 +96,24 @@ export default function PlayerProfile() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { players, loading: playersLoading } = usePlayers()
-  const { matches, loading: matchesLoading } = useMatches()
+  const { matches: allMatches, loading: matchesLoading } = useMatches()
+  const { currentSeason, pastSeasons } = useSeason()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const seasonParam = Number(searchParams.get('season'))
+  const season: SeasonFilterValue = Number.isInteger(seasonParam) && seasonParam > 0 ? seasonParam : 'all'
+  const setSeason = (value: SeasonFilterValue) => {
+    const next = new URLSearchParams(searchParams)
+    if (value === 'all') next.delete('season')
+    else next.set('season', String(value))
+    setSearchParams(next, { replace: true })
+  }
+  const allSeasons = useMemo(
+    () => (currentSeason ? [currentSeason, ...pastSeasons] : pastSeasons),
+    [currentSeason, pastSeasons],
+  )
+  const seasonNumbers = useMemo(() => knownSeasonNumbers(allSeasons, allMatches), [allSeasons, allMatches])
+  // Everything below reads the season-scoped list; the global rank stays on all matches
+  const matches = useMemo(() => filterBySeason(allMatches, season), [allMatches, season])
   const [eloHistory, setEloHistory] = useState<EloHistoryEntry[]>([])
   const [eloLoading, setEloLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -110,12 +140,22 @@ export default function PlayerProfile() {
 
   const player = useMemo(() => players.find(p => p.id === id), [players, id])
   const stats = usePlayerStats(id || '', matches, players)
-  const leaderboard = useLeaderboard(players, matches)
+  const leaderboard = useLeaderboard(players, allMatches, true, currentSeason?.seasonNumber)
 
   const rank = useMemo(() => {
     const entry = leaderboard.find(e => e.user.id === id)
     return entry?.rank || 0
   }, [leaderboard, id])
+
+  const seasonBadge = useMemo(() => (id ? lastSeasonBadges(pastSeasons).get(id) : undefined), [pastSeasons, id])
+
+  // How this player finished the selected (completed) season
+  const seasonFinish = useMemo(() => {
+    if (season === 'all' || !id) return null
+    const s = pastSeasons.find(p => p.seasonNumber === season)
+    if (!s) return null
+    return seasonStandings(s).find(p => p.playerId === id) ?? null
+  }, [season, pastSeasons, id])
 
   // Load ELO history
   useEffect(() => {
@@ -226,8 +266,8 @@ export default function PlayerProfile() {
   // Average lucky points per game — only count games since lucky tracking began
   const avgLucky = useMemo(() => {
     if (playerMatches.length === 0) return 0
-    // Find earliest match (any player) with lucky points
-    const allSorted = [...matches].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    // Find earliest match (any player, any season) with lucky points
+    const allSorted = [...allMatches].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
     const firstLucky = allSorted.find(m =>
       (m.playerALuckyPoints || 0) > 0 || (m.playerBLuckyPoints || 0) > 0
     )
@@ -237,7 +277,7 @@ export default function PlayerProfile() {
     if (relevant.length === 0) return 0
     const totalLucky = relevant.reduce((sum, m) => sum + m.playerLucky, 0)
     return Math.round((totalLucky / relevant.length) * 100) / 100
-  }, [playerMatches, matches])
+  }, [playerMatches, allMatches])
 
   // 11-0 wins — detailed list with opponent + date
   const perfectWinsList = useMemo(() => {
@@ -281,11 +321,26 @@ export default function PlayerProfile() {
     }
   }
 
+  // ELO history within the selected season. Match entries are matched by id;
+  // baseline entries (no match) belong to whichever season window they fall in.
+  const seasonEloHistory = useMemo(() => {
+    if (season === 'all') return eloHistory
+    const seasonOfMatch = new Map(allMatches.map(m => [m.id, matchSeason(m)]))
+    const s = allSeasons.find(x => x.seasonNumber === season)
+    const windowStart = s && season > 1 ? s.startedAt.getTime() : -Infinity
+    const windowEnd = s?.endedAt ? s.endedAt.getTime() : Infinity
+    return eloHistory.filter(entry => {
+      if (entry.matchId) return seasonOfMatch.get(entry.matchId) === season
+      const t = new Date(entry.timestamp).getTime()
+      return t >= windowStart && t <= windowEnd
+    })
+  }, [eloHistory, season, allMatches, allSeasons])
+
   // ELO chart data — grouped by day (last game per day), x-axis is date
   const chartData = useMemo(() => {
-    if (eloHistory.length === 0) return { datasets: [] }
+    if (seasonEloHistory.length === 0) return { datasets: [] }
 
-    const sorted = [...eloHistory].sort(
+    const sorted = [...seasonEloHistory].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     )
 
@@ -359,7 +414,7 @@ export default function PlayerProfile() {
     }
 
     return { datasets, trendSlopePerDay }
-  }, [eloHistory, graphRange, rangeFrom, rangeTo])
+  }, [seasonEloHistory, graphRange, rangeFrom, rangeTo])
 
   // Extend the x-axis a little past the first/last points so edge markers aren't clipped
   const xBounds = useMemo(() => {
@@ -528,21 +583,24 @@ export default function PlayerProfile() {
           </div>
         </div>
 
-        {/* PAUSED: season champion badges hidden
-        {player.seasonWins && player.seasonWins.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-background-lighter">
-            <div className="flex flex-wrap gap-2">
-              {player.seasonWins.map(s => (
-                <span
-                  key={s}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/25 text-yellow-400 text-xs font-semibold"
-                >
-                  🏆 Season {s} Champion
-                </span>
-              ))}
-            </div>
+        {seasonBadge && (
+          <div className="mt-3">
+            <SeasonBadgePill badge={seasonBadge} />
           </div>
-        )} */}
+        )}
+
+        {seasonFinish && (
+          <div className="mt-3 pt-3 border-t border-background-lighter flex items-center justify-between text-sm">
+            <span className="text-gray-400">Season {season} finish</span>
+            <span className="text-white font-semibold">
+              {seasonFinish.rank !== null
+                ? `${seasonFinish.rank <= 3 ? `${PODIUM_MEDALS[seasonFinish.rank as PodiumRank]} ` : ''}#${seasonFinish.rank}`
+                : 'Provisional'}
+              <span className="text-gray-500 font-normal"> · </span>
+              {seasonFinish.eloRating} ELO
+            </span>
+          </div>
+        )}
 
         {/* Recent Form */}
         {recentForm.length > 0 && (
@@ -569,6 +627,14 @@ export default function PlayerProfile() {
           </div>
         )}
       </div>
+
+      <SeasonFilter
+        value={season}
+        onChange={setSeason}
+        seasonNumbers={seasonNumbers}
+        currentSeasonNumber={currentSeason?.seasonNumber}
+        className="mb-4"
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-3 gap-2 mb-4">

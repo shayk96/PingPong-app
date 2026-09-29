@@ -11,9 +11,11 @@ import { useSeason } from '../hooks/useSeason'
 import { useLeaderboard, useRecentMatchesWithPlayers, isPlayerInactive } from '../hooks/useStats'
 import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { MatchCard } from '../components/match/MatchCard'
-import { EditMatchModal, EDIT_WINDOW_MS } from '../components/match/EditMatchModal'
+import { EditMatchModal, canEditMatch, isInClosedSeason } from '../components/match/EditMatchModal'
 import { WeirdStatsBanner } from '../components/WeirdStatsBanner'
 import { Modal, Button, Input, ToastContainer, useToast } from '../components/ui'
+import { lastSeasonBadges, filterBySeason, knownSeasonNumbers, PODIUM_MEDALS, type SeasonFilterValue } from '../lib/seasons'
+import { SeasonFilter } from '../components/season/SeasonFilter'
 import type { User, Match } from '../types'
 
 export default function Leaderboard() {
@@ -22,9 +24,22 @@ export default function Leaderboard() {
   const { matches, loading: matchesLoading, deleteMatch, editMatch, undoMatch, refresh: refreshMatches } = useMatches()
   const { currentSeason, pastSeasons, loading: seasonLoading, refresh: refreshSeason } = useSeason()
   const [showInactivePlayers, setShowInactivePlayers] = useState(false)
-  const leaderboard = useLeaderboard(players, matches, showInactivePlayers)
+  const leaderboard = useLeaderboard(players, matches, showInactivePlayers, currentSeason?.seasonNumber)
   const recentMatches = useRecentMatchesWithPlayers(matches, players, 10)
   const inactiveCount = useMemo(() => players.filter(p => isPlayerInactive(p.lastPlayedAt, (p.wins || 0) + (p.losses || 0))).length, [players])
+  const seasonBadges = useMemo(() => lastSeasonBadges(pastSeasons), [pastSeasons])
+  const lastPodium = useMemo(
+    () =>
+      [...seasonBadges.entries()]
+        .map(([playerId, badge]) => ({
+          playerId,
+          rank: badge.rank,
+          seasonNumber: badge.seasonNumber,
+          displayName: players.find(p => p.id === playerId)?.displayName ?? 'Unknown',
+        }))
+        .sort((a, b) => a.rank - b.rank),
+    [seasonBadges, players],
+  )
   const { toasts, showToast, removeToast } = useToast()
   
   // Add player modal state
@@ -165,6 +180,13 @@ export default function Leaderboard() {
     return oldest.createdAt
   }, [matches, currentSeason])
 
+  const [luckySeason, setLuckySeason] = useState<SeasonFilterValue>('all')
+  const seasonNumbers = useMemo(
+    () => knownSeasonNumbers(currentSeason ? [currentSeason, ...pastSeasons] : pastSeasons, matches),
+    [currentSeason, pastSeasons, matches],
+  )
+  const luckyMatches = useMemo(() => filterBySeason(matches, luckySeason), [matches, luckySeason])
+
   // Lucky points leaderboard data — only count games since lucky tracking began
   const luckyLeaderboard = useMemo(() => {
     // Find the earliest match with any lucky points to determine feature start date
@@ -179,7 +201,7 @@ export default function Leaderboard() {
 
     const playerLucky: Record<string, { name: string; total: number; games: number }> = {}
     // Only count matches from when lucky tracking began
-    const relevantMatches = matches.filter(m => m.createdAt.getTime() >= luckyStartDate.getTime())
+    const relevantMatches = luckyMatches.filter(m => m.createdAt.getTime() >= luckyStartDate.getTime())
     for (const m of relevantMatches) {
       const aLucky = m.playerALuckyPoints || 0
       const bLucky = m.playerBLuckyPoints || 0
@@ -206,7 +228,7 @@ export default function Leaderboard() {
       }))
       .filter(e => e.totalLucky > 0)
       .sort((a, b) => b.avgLucky - a.avgLucky)
-  }, [matches, players])
+  }, [matches, luckyMatches, players])
 
   // Unlucky points leaderboard — lucky points conceded (opponent's lucky points scored against you)
   const unluckyLeaderboard = useMemo(() => {
@@ -218,7 +240,7 @@ export default function Leaderboard() {
     const luckyStartDate = firstLuckyMatch.createdAt
 
     const playerUnlucky: Record<string, { name: string; total: number; games: number }> = {}
-    const relevantMatches = matches.filter(m => m.createdAt.getTime() >= luckyStartDate.getTime())
+    const relevantMatches = luckyMatches.filter(m => m.createdAt.getTime() >= luckyStartDate.getTime())
     for (const m of relevantMatches) {
       const aLucky = m.playerALuckyPoints || 0
       const bLucky = m.playerBLuckyPoints || 0
@@ -246,7 +268,7 @@ export default function Leaderboard() {
       }))
       .filter(e => e.totalUnlucky > 0)
       .sort((a, b) => b.avgUnlucky - a.avgUnlucky)
-  }, [matches, players])
+  }, [matches, luckyMatches, players])
 
   // Total lucky leaderboard — average lucky + average unlucky per player
   const totalLuckyLeaderboard = useMemo(() => {
@@ -525,13 +547,23 @@ export default function Leaderboard() {
               </div>
             )}
           </div>
-          {pastSeasons.length > 0 && pastSeasons[0].winnerName && (
-            <div className="mt-2 pt-2 border-t border-background-lighter flex items-center gap-2">
-              <span className="text-yellow-400 text-xs">👑</span>
-              <span className="text-xs text-gray-400">
-                Season {pastSeasons[0].seasonNumber} Champion: <span className="text-yellow-400 font-medium">{pastSeasons[0].winnerName}</span>
+          {lastPodium.length > 0 && (
+            <button
+              onClick={() => navigate('/seasons')}
+              className="w-full mt-2 pt-2 border-t border-background-lighter flex items-center gap-2 text-left"
+            >
+              <span className="text-xs text-gray-400 flex-shrink-0">Season {lastPodium[0].seasonNumber}:</span>
+              <span className="flex-1 min-w-0 flex items-center gap-2 text-xs truncate">
+                {lastPodium.map(p => (
+                  <span key={p.playerId} className="truncate">
+                    {PODIUM_MEDALS[p.rank]} <span className="text-gray-200 font-medium">{p.displayName}</span>
+                  </span>
+                ))}
               </span>
-            </div>
+              <svg className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           )}
         </div>
       )}
@@ -579,6 +611,7 @@ export default function Leaderboard() {
             entries={leaderboard} 
             onDeletePlayer={handleDeletePlayerClick}
             matches={matches}
+            seasonBadges={seasonBadges}
           />
           <button
             type="button"
@@ -606,8 +639,8 @@ export default function Leaderboard() {
                 match={match}
                 playerA={match.playerA}
                 playerB={match.playerB}
-                canDelete={true}
-                canEdit={Date.now() - match.createdAt.getTime() <= EDIT_WINDOW_MS}
+                canDelete={!isInClosedSeason(match, currentSeason?.seasonNumber)}
+                canEdit={canEditMatch(match, currentSeason?.seasonNumber)}
                 onEdit={() => handleEditMatchClick(match)}
                 onDelete={() => {
                   const info = `${match.playerA?.displayName || 'Unknown'} vs ${match.playerB?.displayName || 'Unknown'} (${match.playerAScore}-${match.playerBScore})`
@@ -896,6 +929,13 @@ export default function Leaderboard() {
         maxWidth="md"
       >
         <div className="space-y-4">
+          <SeasonFilter
+            value={luckySeason}
+            onChange={setLuckySeason}
+            seasonNumbers={seasonNumbers}
+            currentSeasonNumber={currentSeason?.seasonNumber}
+          />
+
           {/* Tabs */}
           <div className="flex gap-1 p-1 bg-background rounded-lg">
             <button

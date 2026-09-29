@@ -9,6 +9,18 @@ import type { Match, User } from '../../types'
 
 export const EDIT_WINDOW_MS = 12 * 60 * 60 * 1000 // 12 hours
 
+/** Closed seasons are read-only — the server rejects changes to them. */
+export function isInClosedSeason(match: Match, currentSeasonNumber?: number): boolean {
+  return currentSeasonNumber !== undefined && (match.seasonNumber ?? 1) !== currentSeasonNumber
+}
+
+export function canEditMatch(match: Match, currentSeasonNumber?: number): boolean {
+  return (
+    Date.now() - new Date(match.createdAt).getTime() <= EDIT_WINDOW_MS &&
+    !isInClosedSeason(match, currentSeasonNumber)
+  )
+}
+
 interface EditMatchModalProps {
   isOpen: boolean
   onClose: () => void

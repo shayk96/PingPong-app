@@ -115,16 +115,35 @@ export function isPlayerInactive(_lastPlayedAt: Date | undefined, totalGames?: n
 
 /**
  * Calculate leaderboard with rankings and rank changes
- * Uses stored wins/losses from player data
- * Players with < 5 games are marked as provisional and shown at the bottom
- * Inactive players (no games in 14+ days) are hidden unless includeInactive is true
+ * Given a season, W/L and provisional status (< 5 games) are counted within that
+ * season — ELO resets each season, so all-time records would not match the rating.
+ * Only established players get a numbered rank.
+ * Inactive players (< 5 games on record) are hidden unless includeInactive is true
  */
 export function useLeaderboard(
   players: User[],
   matches: Match[],
-  includeInactive: boolean = false
+  includeInactive: boolean = false,
+  seasonNumber?: number
 ): LeaderboardEntry[] {
   return useMemo(() => {
+    const seasonRecord = new Map<string, { wins: number; losses: number }>()
+    if (seasonNumber !== undefined) {
+      for (const m of matches) {
+        if ((m.seasonNumber ?? 1) !== seasonNumber) continue
+        const w = seasonRecord.get(m.winnerId) ?? { wins: 0, losses: 0 }
+        w.wins++
+        seasonRecord.set(m.winnerId, w)
+        const l = seasonRecord.get(m.loserId) ?? { wins: 0, losses: 0 }
+        l.losses++
+        seasonRecord.set(m.loserId, l)
+      }
+    }
+    const recordOf = (user: User) =>
+      seasonNumber !== undefined
+        ? seasonRecord.get(user.id) ?? { wins: 0, losses: 0 }
+        : { wins: user.wins || 0, losses: user.losses || 0 }
+
     const playersToRank = includeInactive
       ? [...players]
       : players.filter(p => {
@@ -139,10 +158,13 @@ export function useLeaderboard(
     )
     const lastMatch = recentMatches[0]
 
-    const leaderboard: LeaderboardEntry[] = sortedPlayers.map((user, index) => {
-      const totalGames = (user.wins || 0) + (user.losses || 0)
-      const isProvisional = totalGames < MIN_GAMES_FOR_RANKING
-      const inactive = isPlayerInactive(user.lastPlayedAt, totalGames)
+    let establishedRank = 0
+    const leaderboard: LeaderboardEntry[] = sortedPlayers.map((user) => {
+      const allTimeGames = (user.wins || 0) + (user.losses || 0)
+      const record = recordOf(user)
+      const isProvisional = record.wins + record.losses < MIN_GAMES_FOR_RANKING
+      const inactive = isPlayerInactive(user.lastPlayedAt, allTimeGames)
+      if (!isProvisional) establishedRank++
 
       let rankChange = 0
       if (lastMatch) {
@@ -155,9 +177,9 @@ export function useLeaderboard(
 
       return {
         user,
-        rank: index + 1,
-        wins: user.wins || 0,
-        losses: user.losses || 0,
+        rank: isProvisional ? 0 : establishedRank,
+        wins: record.wins,
+        losses: record.losses,
         rankChange,
         isProvisional,
         isInactive: inactive || undefined
@@ -165,7 +187,7 @@ export function useLeaderboard(
     })
 
     return leaderboard
-  }, [players, matches, includeInactive])
+  }, [players, matches, includeInactive, seasonNumber])
 }
 
 /**

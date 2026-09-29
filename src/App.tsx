@@ -8,6 +8,7 @@ import RoomSession from './pages/RoomSession'
 import DailyRanking from './pages/DailyRanking'
 import RangeScoreboard from './pages/RangeScoreboard'
 import Records from './pages/Records'
+import SeasonHistory from './pages/SeasonHistory'
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
         <Route path="daily" element={<DailyRanking />} />
         <Route path="scoreboard" element={<RangeScoreboard />} />
         <Route path="records" element={<Records />} />
+        <Route path="seasons" element={<SeasonHistory />} />
       </Route>
       
       {/* Catch all */}

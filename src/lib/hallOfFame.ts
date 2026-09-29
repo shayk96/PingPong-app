@@ -6,8 +6,9 @@
  * so the page stays dumb rendering and the logic is easy to test.
  */
 
-import type { Match, User } from '../types'
+import type { Match, Season, User } from '../types'
 import { computePlayerStreaks } from './streaks'
+import { matchSeason } from './seasons'
 
 export interface RecordHolder {
   playerId: string
@@ -205,15 +206,18 @@ function bucketLabel(b: Bucket, gran: Granularity): string {
 /**
  * Compute the full record book.
  *
- * @param matches      the pool records are mined from (may be date-filtered)
- * @param players      roster, used for display names
- * @param allMatches   full history, needed to reconstruct absolute ELO ratings
+ * @param matches             the pool records are mined from (may be filtered)
+ * @param players             roster, used for display names
+ * @param options.allMatches  full history, needed to reconstruct absolute ELO ratings
+ * @param options.seasons     every season, for each one's closing ratings
  */
 export function computeHallOfFame(
   matches: Match[],
   players: User[],
-  allMatches: Match[] = matches,
+  options: { allMatches?: Match[]; seasons?: Season[] } = {},
 ): RecordCategory[] {
+  const allMatches = options.allMatches ?? matches
+  const seasons = options.seasons ?? []
   const sorted = [...matches].sort((a, b) => asDate(a).getTime() - asDate(b).getTime())
   if (sorted.length === 0) return []
 
@@ -430,28 +434,45 @@ export function computeHallOfFame(
   })
 
   // Peak rating ever held. Deltas alone give no absolute rating, so walk each
-  // player's full history backwards from their current rating.
+  // season backwards from the rating it closed on — ELO resets between seasons,
+  // so one continuous walk would carry the reset into earlier seasons.
   const rangeIds = new Set(sorted.map(m => m.id))
+  const seasonByNumber = new Map(seasons.map(s => [s.seasonNumber, s]))
+  const latestSeason = Math.max(0, ...allMatches.map(matchSeason), ...seasons.map(s => s.seasonNumber))
+  const closingRating = (player: User, seasonNumber: number): number | undefined => {
+    const season = seasonByNumber.get(seasonNumber)
+    if (season ? season.isActive : seasonNumber === latestSeason) return player.eloRating
+    return season?.finalStandings.find(s => s.playerId === player.id)?.eloRating
+  }
+
   const peakHolders: RecordHolder[] = []
   for (const player of players) {
-    const history = allMatches
-      .filter(m => m.playerAId === player.id || m.playerBId === player.id)
-      .sort((a, b) => asDate(b).getTime() - asDate(a).getTime())
-    if (history.length === 0) continue
+    const bySeason = new Map<number, Match[]>()
+    for (const m of allMatches) {
+      if (m.playerAId !== player.id && m.playerBId !== player.id) continue
+      const list = bySeason.get(matchSeason(m))
+      if (list) list.push(m)
+      else bySeason.set(matchSeason(m), [m])
+    }
 
-    let rating = player.eloRating
-    let peak: { rating: number; match: Match } | null = null
-    for (const m of history) {
-      if (rangeIds.has(m.id) && (!peak || rating > peak.rating)) peak = { rating, match: m }
-      rating -= eloFor(m, player.id)
+    let peak: { rating: number; match: Match; seasonNumber: number } | null = null
+    for (const [seasonNumber, history] of bySeason) {
+      let rating = closingRating(player, seasonNumber)
+      if (rating === undefined) continue
+      history.sort((a, b) => asDate(b).getTime() - asDate(a).getTime())
+      for (const m of history) {
+        if (rangeIds.has(m.id) && (!peak || rating > peak.rating)) peak = { rating, match: m, seasonNumber }
+        rating -= eloFor(m, player.id)
+      }
     }
     if (!peak) continue
+    const multiSeason = bySeason.size > 1
     peakHolders.push({
       playerId: player.id,
       name: player.displayName,
       value: peak.rating,
       display: `${Math.round(peak.rating)}`,
-      detail: `${fmtDay(asDate(peak.match))} · now ${Math.round(player.eloRating)}`,
+      detail: `${fmtDay(asDate(peak.match))}${multiSeason ? ` · Season ${peak.seasonNumber}` : ''} · now ${Math.round(player.eloRating)}`,
       matchIds: [peak.match.id],
     })
   }

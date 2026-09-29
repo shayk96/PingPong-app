@@ -21,6 +21,9 @@ import { Line } from 'react-chartjs-2'
 import { Modal } from '../ui/Modal'
 import { fetchEloHistory, EloHistoryEntry } from '../../lib/api'
 import { User } from '../../types'
+import { useSeason } from '../../hooks/useSeason'
+import { knownSeasonNumbers, type SeasonFilterValue } from '../../lib/seasons'
+import { SeasonFilter } from '../season/SeasonFilter'
 
 // Register Chart.js components
 ChartJS.register(
@@ -89,7 +92,26 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
   const [rangeFrom, setRangeFrom] = useState<Date>(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
   const [rangeTo, setRangeTo] = useState<Date>(() => new Date())
   const [showSlope, setShowSlope] = useState(false)
+  const [season, setSeason] = useState<SeasonFilterValue>('all')
   const chartRef = useRef<any>(null)
+  const { currentSeason, pastSeasons } = useSeason()
+
+  const allSeasons = useMemo(
+    () => (currentSeason ? [currentSeason, ...pastSeasons] : pastSeasons),
+    [currentSeason, pastSeasons],
+  )
+  const seasonNumbers = useMemo(() => knownSeasonNumbers(allSeasons, []), [allSeasons])
+
+  // Visible time window: the chosen season's span intersected with the date range.
+  // History points are written while their season is live, so time alone places them.
+  const activeWindow = useMemo((): [number, number] => {
+    const [rangeStart, rangeEnd] = resolveRangeWindow(graphRange, rangeFrom, rangeTo)
+    if (season === 'all') return [rangeStart, rangeEnd]
+    const s = allSeasons.find(x => x.seasonNumber === season)
+    const seasonStart = s && season > 1 ? s.startedAt.getTime() : -Infinity
+    const seasonEnd = s?.endedAt ? s.endedAt.getTime() : Infinity
+    return [Math.max(rangeStart, seasonStart), Math.min(rangeEnd, seasonEnd)]
+  }, [graphRange, rangeFrom, rangeTo, season, allSeasons])
 
   // Pre-select players when modal opens
   useEffect(() => {
@@ -190,11 +212,9 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
         y: p.eloRating,
       }))
 
-      // Filter to the selected date range (trend recomputes over visible points)
-      if (graphRange !== 'all') {
-        const [start, end] = resolveRangeWindow(graphRange, rangeFrom, rangeTo)
-        data = data.filter(p => p.x.getTime() >= start && p.x.getTime() <= end)
-      }
+      // Filter to the selected season/date window (trend recomputes over visible points)
+      const [start, end] = activeWindow
+      data = data.filter(p => p.x.getTime() >= start && p.x.getTime() <= end)
 
       const mainDataset = {
         label: getPlayerName(playerId),
@@ -245,12 +265,12 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
     })
 
     return { datasets }
-  }, [selectedPlayerIds, eloHistory, players, graphRange, rangeFrom, rangeTo])
+  }, [selectedPlayerIds, eloHistory, players, activeWindow])
 
   // Per-player stats over the selected range (for the summary table)
   const rangeStats = useMemo(() => {
     if (selectedPlayerIds.length === 0 || eloHistory.length === 0) return []
-    const [start, end] = resolveRangeWindow(graphRange, rangeFrom, rangeTo)
+    const [start, end] = activeWindow
     return selectedPlayerIds.map((playerId, index) => {
       const history = eloHistory
         .filter(h => h.playerId === playerId)
@@ -296,7 +316,7 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
         slopePerDay,
       }
     })
-  }, [selectedPlayerIds, eloHistory, graphRange, rangeFrom, rangeTo])
+  }, [selectedPlayerIds, eloHistory, activeWindow])
 
   // Extend the x-axis a little past the first/last points so edge markers aren't clipped
   const xBounds = useMemo(() => {
@@ -467,6 +487,12 @@ export function EloGraphModal({ isOpen, onClose, players, initialPlayerIds }: El
         {/* Date range selector */}
         {selectedPlayerIds.length > 0 && (
           <div className="space-y-2">
+            <SeasonFilter
+              value={season}
+              onChange={setSeason}
+              seasonNumbers={seasonNumbers}
+              currentSeasonNumber={currentSeason?.seasonNumber}
+            />
             <div className="flex gap-1 p-1 bg-background rounded-lg">
               {([
                 { id: 'all', label: 'All' },

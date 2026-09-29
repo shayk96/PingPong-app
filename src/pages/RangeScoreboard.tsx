@@ -2,7 +2,9 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
+import { useSeason } from '../hooks/useSeason'
 import { calculateElo, getRatingTier } from '../lib/elo'
+import { knownSeasonNumbers, matchSeason } from '../lib/seasons'
 
 const BASE_ELO = 800
 const MIN_GAMES_ACTIVE = 5
@@ -46,11 +48,27 @@ export default function RangeScoreboard() {
   const navigate = useNavigate()
   const { players } = usePlayers()
   const { matches } = useMatches()
+  const { currentSeason, pastSeasons } = useSeason()
 
   const today = startOfDay(new Date())
   const [rangeFrom, setRangeFrom] = useState(addDays(today, -30))
   const [rangeTo, setRangeTo] = useState(today)
   const [showInactive, setShowInactive] = useState(false)
+  // Set when a season chip is picked; cleared by any manual date change
+  const [seasonPick, setSeasonPick] = useState<number | null>(null)
+
+  const seasonNumbers = useMemo(
+    () => knownSeasonNumbers(currentSeason ? [currentSeason, ...pastSeasons] : pastSeasons, matches),
+    [currentSeason, pastSeasons, matches],
+  )
+
+  const pickSeason = (n: number) => {
+    const times = matches.filter(m => matchSeason(m) === n).map(m => new Date(m.createdAt).getTime())
+    if (times.length === 0) return
+    setRangeFrom(startOfDay(new Date(Math.min(...times))))
+    setRangeTo(n === currentSeason?.seasonNumber ? today : startOfDay(new Date(Math.max(...times))))
+    setSeasonPick(n)
+  }
 
   const playerMap = useMemo(() => {
     const m = new Map<string, string>()
@@ -65,6 +83,7 @@ export default function RangeScoreboard() {
 
     const inRange = matches
       .filter(m => {
+        if (seasonPick !== null && matchSeason(m) !== seasonPick) return false
         const t = new Date(m.createdAt).getTime()
         return t >= start && t < end
       })
@@ -103,7 +122,7 @@ export default function RangeScoreboard() {
     }
 
     return [...state.values()].sort((a, b) => b.elo - a.elo)
-  }, [matches, rangeFrom, rangeTo, playerMap])
+  }, [matches, rangeFrom, rangeTo, playerMap, seasonPick])
 
   const inactiveCount = useMemo(() => standings.filter(s => s.games < MIN_GAMES_ACTIVE).length, [standings])
   const visibleStandings = useMemo(
@@ -116,6 +135,7 @@ export default function RangeScoreboard() {
   const setQuickRange = (days: number) => {
     setRangeFrom(addDays(today, -days))
     setRangeTo(today)
+    setSeasonPick(null)
   }
 
   return (
@@ -143,7 +163,7 @@ export default function RangeScoreboard() {
           { label: '3M', days: 90 },
           { label: '1Y', days: 365 },
         ].map(opt => {
-          const active = toInputDate(rangeFrom) === toInputDate(addDays(today, -opt.days)) && toInputDate(rangeTo) === toInputDate(today)
+          const active = seasonPick === null && toInputDate(rangeFrom) === toInputDate(addDays(today, -opt.days)) && toInputDate(rangeTo) === toInputDate(today)
           return (
             <button
               key={opt.label}
@@ -158,6 +178,24 @@ export default function RangeScoreboard() {
         })}
       </div>
 
+      {seasonNumbers.length > 1 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {seasonNumbers.map(n => (
+            <button
+              key={n}
+              onClick={() => pickSeason(n)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                seasonPick === n
+                  ? 'bg-accent text-white border-accent'
+                  : 'bg-background-light text-gray-400 border-background-lighter hover:text-white'
+              }`}
+            >
+              {n === currentSeason?.seasonNumber ? `Season ${n} · now` : `Season ${n}`}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Date range picker */}
       <div className="mb-5 p-4 bg-background-light rounded-xl border border-background-lighter">
         <div className="flex items-center gap-3">
@@ -167,7 +205,7 @@ export default function RangeScoreboard() {
               type="date"
               value={toInputDate(rangeFrom)}
               max={toInputDate(rangeTo)}
-              onChange={e => e.target.value && setRangeFrom(fromInputDate(e.target.value))}
+              onChange={e => { if (e.target.value) { setRangeFrom(fromInputDate(e.target.value)); setSeasonPick(null) } }}
               className="w-full bg-background border border-background-lighter rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary"
             />
           </div>
@@ -179,7 +217,7 @@ export default function RangeScoreboard() {
               value={toInputDate(rangeTo)}
               min={toInputDate(rangeFrom)}
               max={toInputDate(today)}
-              onChange={e => e.target.value && setRangeTo(fromInputDate(e.target.value))}
+              onChange={e => { if (e.target.value) { setRangeTo(fromInputDate(e.target.value)); setSeasonPick(null) } }}
               className="w-full bg-background border border-background-lighter rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary"
             />
           </div>

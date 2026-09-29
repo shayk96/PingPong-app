@@ -2,8 +2,11 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
+import { useSeason } from '../hooks/useSeason'
 import { Modal } from '../components/ui/Modal'
+import { SeasonFilter } from '../components/season/SeasonFilter'
 import { computeHallOfFame, RECORD_GROUPS, type RecordGroup, type RecordHolder } from '../lib/hallOfFame'
+import { filterBySeason, knownSeasonNumbers, type SeasonFilterValue } from '../lib/seasons'
 
 type RangeKey = 'all' | '1m' | '3m' | '1y' | 'custom'
 
@@ -47,8 +50,10 @@ export default function Records() {
   const navigate = useNavigate()
   const { players, loading: playersLoading } = usePlayers()
   const { matches, loading: matchesLoading } = useMatches()
+  const { currentSeason, pastSeasons, loading: seasonLoading } = useSeason()
 
   const today = startOfDay(new Date())
+  const [season, setSeason] = useState<SeasonFilterValue>('all')
   const [range, setRange] = useState<RangeKey>('all')
   const [customFrom, setCustomFrom] = useState(addDays(today, -30))
   const [customTo, setCustomTo] = useState(today)
@@ -62,21 +67,28 @@ export default function Records() {
     negative?: boolean
   } | null>(null)
 
+  const allSeasons = useMemo(
+    () => (currentSeason ? [currentSeason, ...pastSeasons] : pastSeasons),
+    [currentSeason, pastSeasons],
+  )
+  const seasonNumbers = useMemo(() => knownSeasonNumbers(allSeasons, matches), [allSeasons, matches])
+
   const rangedMatches = useMemo(() => {
-    if (range === 'all') return matches
+    const scoped = filterBySeason(matches, season)
+    if (range === 'all') return scoped
     const now = startOfDay(new Date())
     const option = RANGE_OPTIONS.find(o => o.key === range)
     const from = range === 'custom' ? startOfDay(customFrom) : addDays(now, -(option?.days ?? 30))
     const to = range === 'custom' ? addDays(startOfDay(customTo), 1) : addDays(now, 1)
-    return matches.filter(m => {
+    return scoped.filter(m => {
       const t = new Date(m.createdAt).getTime()
       return t >= from.getTime() && t < to.getTime()
     })
-  }, [matches, range, customFrom, customTo])
+  }, [matches, season, range, customFrom, customTo])
 
   const categories = useMemo(
-    () => computeHallOfFame(rangedMatches, players, matches),
-    [rangedMatches, players, matches],
+    () => computeHallOfFame(rangedMatches, players, { allMatches: matches, seasons: allSeasons }),
+    [rangedMatches, players, matches, allSeasons],
   )
 
   const visibleCategories = useMemo(
@@ -137,7 +149,7 @@ export default function Records() {
     })
   }
 
-  const loading = playersLoading || matchesLoading
+  const loading = playersLoading || matchesLoading || seasonLoading
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6 animate-fade-in">
@@ -155,6 +167,14 @@ export default function Records() {
       <p className="text-sm text-gray-400 mb-4">
         Every all-time best (and worst) in the league. Tap a name to see the games behind it.
       </p>
+
+      <SeasonFilter
+        value={season}
+        onChange={setSeason}
+        seasonNumbers={seasonNumbers}
+        currentSeasonNumber={currentSeason?.seasonNumber}
+        className="mb-3"
+      />
 
       {/* Date range */}
       <div className="flex gap-1 p-1 bg-background-light rounded-lg mb-3">

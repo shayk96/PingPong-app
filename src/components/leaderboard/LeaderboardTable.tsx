@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import type { LeaderboardEntry, Match } from '../../types'
 import { getRatingTier } from '../../lib/elo'
 import { computeCurrentStreaks } from '../../lib/streaks'
+import type { SeasonBadge } from '../../lib/seasons'
+import { SeasonBadgePill } from '../season/SeasonBadgePill'
 
 // Streak thresholds for hot/cold badges
 const FIRE_MIN = 6 // winning streak of over 5 games
@@ -12,9 +14,11 @@ interface LeaderboardTableProps {
   entries: LeaderboardEntry[]
   onDeletePlayer?: (playerId: string, playerName: string) => void
   matches?: Match[]
+  /** Podium of the last completed season, keyed by player id */
+  seasonBadges?: Map<string, SeasonBadge>
 }
 
-export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: LeaderboardTableProps) {
+export function LeaderboardTable({ entries, onDeletePlayer, matches = [], seasonBadges }: LeaderboardTableProps) {
   const navigate = useNavigate()
 
   // Count total 11-0 wins per player
@@ -62,6 +66,7 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
         const streak = streakMap.get(entry.user.id)
         const onFire = streak?.type === 'win' && streak.length >= FIRE_MIN
         const onIce = streak?.type === 'loss' && streak.length >= ICE_MIN
+        const seasonBadge = seasonBadges?.get(entry.user.id)
         return (
           <div
             key={entry.user.id}
@@ -80,8 +85,9 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [] }: Lead
                 <span className={`font-semibold truncate min-w-0 ${entry.isProvisional ? 'text-gray-400' : 'text-white'}`}>
                   {entry.user.displayName}
                 </span>
-                {(pw > 0 || onFire || onIce) && (
+                {(seasonBadge || pw > 0 || onFire || onIce) && (
                   <span className="flex items-center gap-1.5 flex-shrink-0">
+                    {seasonBadge && <SeasonBadgePill badge={seasonBadge} compact />}
                     {pw > 0 && (
                       <span
                         className="inline-flex items-center gap-0.5"

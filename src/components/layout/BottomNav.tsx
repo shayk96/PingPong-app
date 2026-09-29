@@ -7,7 +7,7 @@ export function BottomNav() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches') || location.pathname.startsWith('/room') || location.pathname.startsWith('/daily') || location.pathname.startsWith('/scoreboard') || location.pathname.startsWith('/records')
+  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches') || location.pathname.startsWith('/room') || location.pathname.startsWith('/daily') || location.pathname.startsWith('/scoreboard') || location.pathname.startsWith('/records') || location.pathname.startsWith('/seasons')
 
   // Close menu on outside click
   useEffect(() => {
@@ -73,6 +73,14 @@ export function BottomNav() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15a4 4 0 004-4V5H8v6a4 4 0 004 4zm0 0v3m0 0H9m3 0h3M8 7H5a2 2 0 000 4h3m8-4h3a2 2 0 010 4h-3" />
                   </svg>
                   Record Book
+                </button>
+                <div className="h-px bg-background-lighter" />
+                <button
+                  onClick={() => navigate('/seasons')}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-200 hover:bg-background-lighter transition-colors"
+                >
+                  <span className="w-5 h-5 flex items-center justify-center text-base leading-none">🥇</span>
+                  Past Seasons
                 </button>
                 <div className="h-px bg-background-lighter" />
                 <button

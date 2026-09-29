@@ -7,15 +7,26 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
+import { useSeason } from '../hooks/useSeason'
 import { formatEloDelta } from '../lib/elo'
+import { filterBySeason, knownSeasonNumbers, type SeasonFilterValue } from '../lib/seasons'
+import { SeasonFilter } from '../components/season/SeasonFilter'
 import { Modal } from '../components/ui/Modal'
-import { EditMatchModal, EDIT_WINDOW_MS } from '../components/match/EditMatchModal'
+import { EditMatchModal, canEditMatch, isInClosedSeason } from '../components/match/EditMatchModal'
 import type { Match } from '../types'
 
 export default function AllMatches() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, refresh: refreshPlayers } = usePlayers()
-  const { matches, loading: matchesLoading, deleteMatch, editMatch } = useMatches()
+  const { matches: allMatches, loading: matchesLoading, deleteMatch, editMatch } = useMatches()
+  const { currentSeason, pastSeasons } = useSeason()
+  const [season, setSeason] = useState<SeasonFilterValue>('all')
+
+  const seasonNumbers = useMemo(
+    () => knownSeasonNumbers(currentSeason ? [currentSeason, ...pastSeasons] : pastSeasons, allMatches),
+    [currentSeason, pastSeasons, allMatches],
+  )
+  const matches = useMemo(() => filterBySeason(allMatches, season), [allMatches, season])
 
   const loading = playersLoading || matchesLoading
 
@@ -119,8 +130,17 @@ export default function AllMatches() {
         </h1>
         <p className="text-gray-400 text-sm">
           {totalMatches} match{totalMatches !== 1 ? 'es' : ''} played
+          {season !== 'all' && ` in Season ${season}`}
         </p>
       </header>
+
+      <SeasonFilter
+        value={season}
+        onChange={setSeason}
+        seasonNumbers={seasonNumbers}
+        currentSeasonNumber={currentSeason?.seasonNumber}
+        className="-mt-3 mb-5"
+      />
 
       {/* Matches grouped by date */}
       {groupedMatches.length > 0 ? (
@@ -147,7 +167,8 @@ export default function AllMatches() {
                     hour: '2-digit',
                     minute: '2-digit',
                   })
-                  const canEdit = Date.now() - match.createdAt.getTime() <= EDIT_WINDOW_MS
+                  const canEdit = canEditMatch(match, currentSeason?.seasonNumber)
+                  const locked = isInClosedSeason(match, currentSeason?.seasonNumber)
 
                   return (
                     <div
@@ -219,18 +240,24 @@ export default function AllMatches() {
                               </svg>
                             </button>
                           )}
-                          <button
-                            onClick={() => openDeleteModal(
-                              match.id,
-                              `${match.playerA?.displayName || 'Unknown'} ${match.playerAScore}–${match.playerBScore} ${match.playerB?.displayName || 'Unknown'}`
-                            )}
-                            className="text-gray-600 hover:text-error transition-colors p-1 -mr-1"
-                            title="Delete match"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          {locked ? (
+                            <span className="text-[10px] text-gray-600" title="Closed seasons are read-only">
+                              S{match.seasonNumber ?? 1} 🔒
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => openDeleteModal(
+                                match.id,
+                                `${match.playerA?.displayName || 'Unknown'} ${match.playerAScore}–${match.playerBScore} ${match.playerB?.displayName || 'Unknown'}`
+                              )}
+                              className="text-gray-600 hover:text-error transition-colors p-1 -mr-1"
+                              title="Delete match"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
