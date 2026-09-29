@@ -8,7 +8,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
 import { useSeason } from '../hooks/useSeason'
-import { useLeaderboard, useRecentMatchesWithPlayers, isPlayerInactive } from '../hooks/useStats'
+import { useLeaderboard, useRecentMatchesWithPlayers } from '../hooks/useStats'
 import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { MatchCard } from '../components/match/MatchCard'
 import { EditMatchModal, canEditMatch, isInClosedSeason } from '../components/match/EditMatchModal'
@@ -20,13 +20,17 @@ import type { User, Match } from '../types'
 
 export default function Leaderboard() {
   const navigate = useNavigate()
-  const { players, loading: playersLoading, addPlayer, deletePlayer, refresh: refreshPlayers } = usePlayers()
+  const { players, loading: playersLoading, addPlayer, deletePlayer, retirePlayer, refresh: refreshPlayers } = usePlayers()
   const { matches, loading: matchesLoading, deleteMatch, editMatch, undoMatch, refresh: refreshMatches } = useMatches()
   const { currentSeason, pastSeasons, loading: seasonLoading, refresh: refreshSeason } = useSeason()
   const [showInactivePlayers, setShowInactivePlayers] = useState(false)
-  const leaderboard = useLeaderboard(players, matches, showInactivePlayers, currentSeason?.seasonNumber)
+  const fullLeaderboard = useLeaderboard(players, matches, true, currentSeason?.seasonNumber)
+  const leaderboard = useMemo(
+    () => (showInactivePlayers ? fullLeaderboard : fullLeaderboard.filter(e => !e.isInactive)),
+    [fullLeaderboard, showInactivePlayers],
+  )
   const recentMatches = useRecentMatchesWithPlayers(matches, players, 10)
-  const inactiveCount = useMemo(() => players.filter(p => isPlayerInactive(p.lastPlayedAt, (p.wins || 0) + (p.losses || 0))).length, [players])
+  const inactiveCount = useMemo(() => fullLeaderboard.filter(e => e.isInactive).length, [fullLeaderboard])
   const seasonBadges = useMemo(() => lastSeasonBadges(pastSeasons), [pastSeasons])
   const lastPodium = useMemo(
     () =>
@@ -404,6 +408,19 @@ export default function Leaderboard() {
     }
   }
 
+  const handleRetirePlayer = async () => {
+    setDeletingPlayer(true)
+    try {
+      await retirePlayer(deletePlayerId, true)
+      showToast(`${deletePlayerName} retired — history kept`, 'success')
+      setShowDeletePlayerModal(false)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to retire player', 'error')
+    } finally {
+      setDeletingPlayer(false)
+    }
+  }
+
   const handleDeleteMatchClick = (matchId: string, matchInfo: string) => {
     setDeleteMatchId(matchId)
     setDeleteMatchInfo(matchInfo)
@@ -607,12 +624,18 @@ export default function Leaderboard() {
       {/* Rankings */}
       {players.length > 0 && (
         <section className="mb-8">
-          <LeaderboardTable 
-            entries={leaderboard} 
-            onDeletePlayer={handleDeletePlayerClick}
-            matches={matches}
-            seasonBadges={seasonBadges}
-          />
+          {leaderboard.length === 0 && inactiveCount > 0 ? (
+            <div className="text-center py-8 text-gray-400 text-sm">
+              No games yet this season — play a match to get on the board.
+            </div>
+          ) : (
+            <LeaderboardTable
+              entries={leaderboard}
+              onDeletePlayer={handleDeletePlayerClick}
+              matches={matches}
+              seasonBadges={seasonBadges}
+            />
+          )}
           <button
             type="button"
             onClick={() => setShowInactivePlayers(prev => !prev)}
@@ -709,9 +732,24 @@ export default function Leaderboard() {
       <Modal
         isOpen={showDeletePlayerModal}
         onClose={() => setShowDeletePlayerModal(false)}
-        title="Delete Player"
+        title="Remove Player"
       >
         <div className="space-y-4">
+          <div className="bg-background rounded-xl p-4 space-y-3">
+            <p className="text-gray-300 text-sm">
+              <strong className="text-white">Retire</strong> {deletePlayerName} if they left: they're removed from this
+              season and every season after, but all their past matches, records and season results stay.
+            </p>
+            <Button
+              variant="primary"
+              onClick={handleRetirePlayer}
+              loading={deletingPlayer}
+              className="w-full"
+            >
+              Retire Player (keep history)
+            </Button>
+          </div>
+
           <div className="bg-error/10 border border-error/30 rounded-xl p-4">
             <p className="text-error font-medium mb-1">⚠️ Warning</p>
             <p className="text-gray-300 text-sm">

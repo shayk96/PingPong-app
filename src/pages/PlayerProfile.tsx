@@ -95,7 +95,8 @@ ChartJS.register(
 export default function PlayerProfile() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { players, loading: playersLoading } = usePlayers()
+  const { players, loading: playersLoading, retirePlayer } = usePlayers()
+  const [reactivating, setReactivating] = useState(false)
   const { matches: allMatches, loading: matchesLoading } = useMatches()
   const { currentSeason, pastSeasons } = useSeason()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -594,6 +595,23 @@ export default function PlayerProfile() {
         {seasonBadge && (
           <div className="mt-3">
             <SeasonBadgePill badge={seasonBadge} />
+          </div>
+        )}
+
+        {player.retiredFromSeason != null && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-gray-800/60 border border-gray-700 px-3 py-2 text-sm">
+            <span className="text-gray-300">👋 Retired from Season {player.retiredFromSeason} · history kept</span>
+            <button
+              type="button"
+              disabled={reactivating}
+              onClick={async () => {
+                setReactivating(true)
+                try { await retirePlayer(player.id, false) } finally { setReactivating(false) }
+              }}
+              className="text-xs font-medium text-accent hover:underline disabled:opacity-50"
+            >
+              {reactivating ? 'Restoring…' : 'Bring back'}
+            </button>
           </div>
         )}
 

@@ -13,6 +13,7 @@ export interface User {
   createdAt: Date
   lastPlayedAt?: Date
   seasonWins?: number[] // Season numbers this player has won
+  retiredFromSeason?: number | null // First season the player no longer takes part in
 }
 
 export interface StreakRecord {

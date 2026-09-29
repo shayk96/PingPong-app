@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { fetchPlayers, createPlayer as apiCreatePlayer, deletePlayer as apiDeletePlayer } from '../lib/api'
+import { fetchPlayers, createPlayer as apiCreatePlayer, deletePlayer as apiDeletePlayer, setPlayerRetired } from '../lib/api'
 import type { User } from '../types'
 
 export function usePlayers() {
@@ -47,7 +47,12 @@ export function usePlayers() {
     await loadPlayers()
   }, [loadPlayers])
 
+  const retirePlayer = useCallback(async (playerId: string, retired: boolean) => {
+    await setPlayerRetired(playerId, retired)
+    await loadPlayers()
+  }, [loadPlayers])
+
   const refresh = loadPlayers
 
-  return { players, loading, error, addPlayer, deletePlayer, refresh }
+  return { players, loading, error, addPlayer, deletePlayer, retirePlayer, refresh }
 }

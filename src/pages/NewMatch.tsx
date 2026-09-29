@@ -181,7 +181,9 @@ export default function NewMatch() {
 
   // Sort players alphabetically
   const sortedPlayers = useMemo(
-    () => [...players].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    () => players
+      .filter(p => p.retiredFromSeason == null)
+      .sort((a, b) => a.displayName.localeCompare(b.displayName)),
     [players]
   )
   const [playerSearch, setPlayerSearch] = useState('')

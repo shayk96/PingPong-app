@@ -58,8 +58,14 @@ const userSchema = new mongoose.Schema({
   losses: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
   lastPlayedAt: { type: Date, default: Date.now },
-  seasonWins: [{ type: Number }] // Array of season numbers this player has won
+  seasonWins: [{ type: Number }], // Array of season numbers this player has won
+  // First season the player no longer takes part in (left the company); history is kept
+  retiredFromSeason: { type: Number, default: null }
 })
+
+function isRetiredIn(player, seasonNumber) {
+  return player.retiredFromSeason != null && seasonNumber >= player.retiredFromSeason
+}
 
 const matchSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
@@ -170,7 +176,7 @@ async function checkAndEndSeason() {
 
     console.log(`⏰ Season ${currentSeason.seasonNumber} has reached its end date. Ending automatically...`)
 
-    const players = await User.find()
+    const players = (await User.find()).filter(p => !isRetiredIn(p, currentSeason.seasonNumber))
     const seasonMatches = await Match.find({ seasonNumber: currentSeason.seasonNumber })
 
     const seasonStats = {}
@@ -412,6 +418,30 @@ app.patch('/api/players/:id/rename', async (req, res) => {
   }
 })
 
+// Retire a player from the live season onward (keeps all history), or bring them back
+app.patch('/api/players/:id/retire', async (req, res) => {
+  const { id } = req.params
+  const { retired } = req.body || {}
+
+  try {
+    const player = await User.findOne({ id })
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' })
+    }
+
+    if (retired) {
+      const activeSeason = await Season.findOne({ isActive: true })
+      player.retiredFromSeason = activeSeason?.seasonNumber || 1
+    } else {
+      player.retiredFromSeason = null
+    }
+    await player.save()
+    res.json(player)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update player' })
+  }
+})
+
 // Delete a player (password protected)
 app.delete('/api/players/:id', async (req, res) => {
   const { id } = req.params
@@ -506,6 +536,13 @@ app.post('/api/matches', async (req, res) => {
     
     if (!playerA || !playerB) {
       return res.status(400).json({ error: 'Invalid player selection' })
+    }
+
+    const liveSeason = await Season.findOne({ isActive: true })
+    const liveSeasonNumber = liveSeason?.seasonNumber || 1
+    const retired = [playerA, playerB].find(p => isRetiredIn(p, liveSeasonNumber))
+    if (retired) {
+      return res.status(400).json({ error: `${retired.displayName} is retired and can't play new matches` })
     }
 
     // Determine winner and loser
@@ -867,7 +904,7 @@ app.post('/api/seasons/end', async (req, res) => {
       return res.status(400).json({ error: 'No active season to end' })
     }
 
-    const players = await User.find()
+    const players = (await User.find()).filter(p => !isRetiredIn(p, currentSeason.seasonNumber))
     const seasonMatches = await Match.find({ seasonNumber: currentSeason.seasonNumber })
 
     // Build per-player season stats from matches in this season
@@ -1364,7 +1401,7 @@ async function replayMatch(match, playerState, historyEntries) {
  */
 async function rewriteFinalStandings(seasonObj, players, playerState, seasonRecord) {
   const finalStandings = players
-    .filter(p => playerState[p.id])
+    .filter(p => playerState[p.id] && !isRetiredIn(p, seasonObj.seasonNumber))
     .map(p => ({
       playerId: p.id,
       displayName: p.displayName,

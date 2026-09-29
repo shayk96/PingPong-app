@@ -6,7 +6,7 @@
  * the server uses to crown the champion.
  */
 
-import type { Match, Season } from '../types'
+import type { Match, Season, User } from '../types'
 
 export const MIN_SEASON_GAMES = 5
 
@@ -30,6 +30,11 @@ export interface SeasonPlacement {
 export interface SeasonBadge {
   rank: PodiumRank
   seasonNumber: number
+}
+
+/** True if the player has left and takes no part in the given season */
+export function isRetiredIn(player: User, seasonNumber: number | undefined): boolean {
+  return player.retiredFromSeason != null && seasonNumber !== undefined && seasonNumber >= player.retiredFromSeason
 }
 
 export function matchSeason(m: Match): number {

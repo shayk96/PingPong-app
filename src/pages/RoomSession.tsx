@@ -100,7 +100,9 @@ export default function RoomSession() {
   const [allSessionPlayers, setAllSessionPlayers] = useState<User[]>([])
 
   const sortedPlayers = useMemo(
-    () => [...players].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    () => players
+      .filter(p => p.retiredFromSeason == null)
+      .sort((a, b) => a.displayName.localeCompare(b.displayName)),
     [players]
   )
 
@@ -113,7 +115,7 @@ export default function RoomSession() {
   // Players available to add (not already in room)
   const addablePlayers = useMemo(() => {
     const roomIds = new Set(roomPlayers.map(p => p.id))
-    let list = players.filter(p => !roomIds.has(p.id))
+    let list = players.filter(p => !roomIds.has(p.id) && p.retiredFromSeason == null)
     if (addPlayerSearch.trim()) {
       const q = addPlayerSearch.trim().toLowerCase()
       list = list.filter(p => p.displayName.toLowerCase().includes(q))

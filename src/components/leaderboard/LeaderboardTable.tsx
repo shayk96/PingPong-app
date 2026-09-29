@@ -9,6 +9,7 @@ import { SeasonBadgePill } from '../season/SeasonBadgePill'
 // Streak thresholds for hot/cold badges
 const FIRE_MIN = 6 // winning streak of over 5 games
 const ICE_MIN = 5  // losing streak of 5+ games
+const MIN_RANKED_GAMES = 5
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[]
@@ -76,7 +77,7 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [], season
           >
             {/* Rank */}
             <div className="w-9 flex-shrink-0">
-              <RankBadge rank={entry.rank} isProvisional={entry.isProvisional} isInactive={entry.isInactive} />
+              <RankBadge rank={entry.rank} isProvisional={entry.isProvisional} games={entry.wins + entry.losses} />
             </div>
 
             {/* Player info */}
@@ -163,17 +164,15 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [], season
   )
 }
 
-function RankBadge({ rank, isProvisional, isInactive }: { rank: number; isProvisional?: boolean; isInactive?: boolean }) {
-  // PAUSED: inactive badge disabled — all players ranked normally
-  // if (isInactive) {
-  //   return (
-  //     <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-sm font-medium text-gray-500" title="Inactive">-</div>
-  //   )
-  // }
+function RankBadge({ rank, isProvisional, games }: { rank: number; isProvisional?: boolean; games: number }) {
   if (isProvisional) {
+    const left = MIN_RANKED_GAMES - games
     return (
-      <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-sm font-medium text-gray-500">
-        -
+      <div
+        className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-[10px] font-semibold text-gray-400"
+        title={`Unranked — ${left} more game${left === 1 ? '' : 's'} this season to get a rank`}
+      >
+        {games}/{MIN_RANKED_GAMES}
       </div>
     )
   }

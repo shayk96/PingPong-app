@@ -40,6 +40,19 @@ export async function renamePlayer(playerId: string, displayName: string) {
   return res.json()
 }
 
+export async function setPlayerRetired(playerId: string, retired: boolean) {
+  const res = await fetch(`${API_URL}/players/${playerId}/retire`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ retired })
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error || 'Failed to update player')
+  }
+  return res.json()
+}
+
 export async function deletePlayer(playerId: string) {
   const res = await fetch(`${API_URL}/players/${playerId}`, {
     method: 'DELETE',
