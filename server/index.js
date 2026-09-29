@@ -328,8 +328,35 @@ async function migrateFromJsonFiles() {
 
 // ============ API Routes ============
 
+// One-time retirements for players who left the company. Recorded in Meta so it
+// never re-applies after someone is brought back from their profile.
+const metaSchema = new mongoose.Schema({
+  key: { type: String, required: true, unique: true },
+  appliedAt: { type: Date, default: Date.now }
+})
+const Meta = mongoose.model('Meta', metaSchema)
+
+const LEFT_COMPANY = { key: 'retire-liav-carlos-s2', firstNames: ['liav', 'carlos'], fromSeason: 2 }
+let leftCompanyApplied = false
+
+async function applyLeftCompanyRetirements() {
+  if (leftCompanyApplied) return
+  if (!(await Meta.findOne({ key: LEFT_COMPANY.key }))) {
+    for (const name of LEFT_COMPANY.firstNames) {
+      const result = await User.updateMany(
+        { displayName: { $regex: new RegExp(`^${name}(\\s|$)`, 'i') }, retiredFromSeason: null },
+        { $set: { retiredFromSeason: LEFT_COMPANY.fromSeason } }
+      )
+      console.log(`👋 Retired ${result.modifiedCount} player(s) named ${name} from Season ${LEFT_COMPANY.fromSeason}`)
+    }
+    await Meta.create({ key: LEFT_COMPANY.key })
+  }
+  leftCompanyApplied = true
+}
+
 app.use('/api', async (req, res, next) => {
   try { await checkAndEndSeason() } catch (e) { /* non-blocking */ }
+  try { await applyLeftCompanyRetirements() } catch (e) { /* non-blocking */ }
   next()
 })
 
