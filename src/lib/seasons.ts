@@ -14,7 +14,7 @@ export type SeasonFilterValue = 'all' | number
 
 export type PodiumRank = 1 | 2 | 3
 
-export const PODIUM_MEDALS: Record<PodiumRank, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
+export const PODIUM_MEDALS: Record<PodiumRank, string> = { 1: '🏆', 2: '🥈', 3: '🥉' }
 
 export interface SeasonPlacement {
   playerId: string

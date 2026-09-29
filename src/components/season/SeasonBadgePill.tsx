@@ -10,7 +10,7 @@ const PLACE: Record<SeasonBadge['rank'], string> = { 1: 'Champion', 2: '2nd plac
 
 interface SeasonBadgePillProps {
   badge: SeasonBadge
-  /** Compact form for dense rows: medal + "S1" only */
+  /** Compact form for dense rows: icon only */
   compact?: boolean
 }
 
@@ -24,7 +24,7 @@ export function SeasonBadgePill({ badge, compact = false }: SeasonBadgePillProps
       }`}
     >
       <span className={compact ? 'text-[11px]' : 'text-sm'}>{PODIUM_MEDALS[badge.rank]}</span>
-      {compact ? `S${badge.seasonNumber}` : title}
+      {!compact && title}
     </span>
   )
 }

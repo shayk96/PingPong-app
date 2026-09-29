@@ -157,6 +157,14 @@ export default function PlayerProfile() {
     return seasonStandings(s).find(p => p.playerId === id) ?? null
   }, [season, pastSeasons, id])
 
+  // How this player finished the most recently completed season
+  const lastSeasonFinish = useMemo(() => {
+    if (!id || pastSeasons.length === 0) return null
+    const last = pastSeasons.reduce((a, b) => (b.seasonNumber > a.seasonNumber ? b : a))
+    const entry = seasonStandings(last).find(p => p.playerId === id)
+    return entry ? { ...entry, seasonNumber: last.seasonNumber } : null
+  }, [pastSeasons, id])
+
   // Load ELO history
   useEffect(() => {
     if (!id) return
@@ -589,7 +597,20 @@ export default function PlayerProfile() {
           </div>
         )}
 
-        {seasonFinish && (
+        {lastSeasonFinish && (
+          <div className="mt-3 pt-3 border-t border-background-lighter flex items-center justify-between text-sm">
+            <span className="text-gray-400">Last season rank (Season {lastSeasonFinish.seasonNumber})</span>
+            <span className="text-white font-semibold">
+              {lastSeasonFinish.rank !== null
+                ? `${lastSeasonFinish.rank <= 3 ? `${PODIUM_MEDALS[lastSeasonFinish.rank as PodiumRank]} ` : ''}#${lastSeasonFinish.rank}`
+                : 'Provisional'}
+              <span className="text-gray-500 font-normal"> · </span>
+              {lastSeasonFinish.eloRating} ELO
+            </span>
+          </div>
+        )}
+
+        {seasonFinish && season !== lastSeasonFinish?.seasonNumber && (
           <div className="mt-3 pt-3 border-t border-background-lighter flex items-center justify-between text-sm">
             <span className="text-gray-400">Season {season} finish</span>
             <span className="text-white font-semibold">

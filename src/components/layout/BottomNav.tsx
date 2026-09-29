@@ -79,7 +79,7 @@ export function BottomNav() {
                   onClick={() => navigate('/seasons')}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-200 hover:bg-background-lighter transition-colors"
                 >
-                  <span className="w-5 h-5 flex items-center justify-center text-base leading-none">🥇</span>
+                  <span className="w-5 h-5 flex items-center justify-center text-base leading-none">🏆</span>
                   Past Seasons
                 </button>
                 <div className="h-px bg-background-lighter" />
