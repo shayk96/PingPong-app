@@ -119,7 +119,7 @@ export function isPlayerInactive(_lastPlayedAt: Date | undefined, totalGames?: n
  * Given a season, W/L and provisional status (< 5 games) are counted within that
  * season — ELO resets each season, so all-time records would not match the rating.
  * Only established players get a numbered rank.
- * Inactive players (< 5 games on record, or none yet this season) are hidden unless
+ * Inactive players (< 5 games on record, or < 5 this season) are hidden unless
  * includeInactive is true. Players retired as of the season are always left out.
  */
 export function useLeaderboard(
@@ -146,7 +146,7 @@ export function useLeaderboard(
         ? seasonRecord.get(user.id) ?? { wins: 0, losses: 0 }
         : { wins: user.wins || 0, losses: user.losses || 0 }
 
-    // Inactive: fewer than 5 games on record, or (within a season) no games this season yet
+    // Inactive: fewer than 5 games on record, or (within a season) fewer than 5 this season
     const inactiveIds = new Set(
       players
         .filter(p => {
@@ -154,7 +154,7 @@ export function useLeaderboard(
           if (isPlayerInactive(p.lastPlayedAt, allTime)) return true
           if (seasonNumber === undefined) return false
           const r = recordOf(p)
-          return r.wins + r.losses === 0
+          return r.wins + r.losses < MIN_GAMES_FOR_RANKING
         })
         .map(p => p.id)
     )

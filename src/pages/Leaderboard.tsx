@@ -626,7 +626,7 @@ export default function Leaderboard() {
         <section className="mb-8">
           {leaderboard.length === 0 && inactiveCount > 0 ? (
             <div className="text-center py-8 text-gray-400 text-sm">
-              No games yet this season — play a match to get on the board.
+              No one has 5 games this season yet — play 5 to get on the board.
             </div>
           ) : (
             <LeaderboardTable
