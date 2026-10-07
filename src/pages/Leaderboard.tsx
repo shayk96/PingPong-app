@@ -30,6 +30,10 @@ export default function Leaderboard() {
     [fullLeaderboard, showInactivePlayers],
   )
   const recentMatches = useRecentMatchesWithPlayers(matches, players, 10)
+  const seasonMatches = useMemo(
+    () => (currentSeason ? filterBySeason(matches, currentSeason.seasonNumber) : matches),
+    [matches, currentSeason],
+  )
   const inactiveCount = useMemo(() => fullLeaderboard.filter(e => e.isInactive).length, [fullLeaderboard])
   const seasonBadges = useMemo(() => lastSeasonBadges(pastSeasons), [pastSeasons])
   const lastPodium = useMemo(
@@ -615,8 +619,8 @@ export default function Leaderboard() {
       })()}
 
       {/* Weird Stats Banner */}
-      {matches.length >= 3 && players.length >= 2 && (
-        <WeirdStatsBanner matches={matches} players={players} />
+      {seasonMatches.length >= 3 && players.length >= 2 && (
+        <WeirdStatsBanner matches={seasonMatches} players={players} />
       )}
 
       {/* Head to Head button removed for now (code kept in modal/state/handlers) */}
@@ -632,7 +636,7 @@ export default function Leaderboard() {
             <LeaderboardTable
               entries={leaderboard}
               onDeletePlayer={handleDeletePlayerClick}
-              matches={matches}
+              matches={seasonMatches}
               seasonBadges={seasonBadges}
             />
           )}

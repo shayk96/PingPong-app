@@ -4,7 +4,7 @@ import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
 import { useLeaderboard } from '../hooks/useStats'
 import { useSeason } from '../hooks/useSeason'
-import { lastSeasonBadges } from '../lib/seasons'
+import { lastSeasonBadges, filterBySeason } from '../lib/seasons'
 import { validateMatch } from '../lib/validation'
 import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { Button, ToastContainer, useToast } from '../components/ui'
@@ -42,6 +42,10 @@ export default function RoomSession() {
   const { currentSeason, pastSeasons } = useSeason()
   const leaderboard = useLeaderboard(players, globalMatches, false, currentSeason?.seasonNumber)
   const seasonBadges = useMemo(() => lastSeasonBadges(pastSeasons), [pastSeasons])
+  const seasonMatches = useMemo(
+    () => (currentSeason ? filterBySeason(globalMatches, currentSeason.seasonNumber) : globalMatches),
+    [globalMatches, currentSeason],
+  )
   const { toasts, showToast, removeToast } = useToast()
 
   const [showLeaderboard, setShowLeaderboard] = useState(false)
@@ -1197,7 +1201,7 @@ export default function RoomSession() {
           </button>
           {showLeaderboard && (
             <div className="max-h-80 overflow-y-auto">
-              <LeaderboardTable entries={leaderboard} matches={globalMatches} seasonBadges={seasonBadges} />
+              <LeaderboardTable entries={leaderboard} matches={seasonMatches} seasonBadges={seasonBadges} />
             </div>
           )}
 
