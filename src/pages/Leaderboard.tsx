@@ -18,6 +18,11 @@ import { lastSeasonBadges, filterBySeason, knownSeasonNumbers, PODIUM_MEDALS, ty
 import { SeasonFilter } from '../components/season/SeasonFilter'
 import type { User, Match } from '../types'
 
+/** Share of `part` in `whole` as a percentage, one decimal */
+function toPct(part: number, whole: number): number {
+  return whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0
+}
+
 export default function Leaderboard() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, addPlayer, deletePlayer, retirePlayer, refresh: refreshPlayers } = usePlayers()
@@ -207,7 +212,7 @@ export default function Leaderboard() {
     }
     const luckyStartDate = firstLuckyMatch.createdAt
 
-    const playerLucky: Record<string, { name: string; total: number; games: number }> = {}
+    const playerLucky: Record<string, { name: string; total: number; points: number }> = {}
     // Only count matches from when lucky tracking began
     const relevantMatches = luckyMatches.filter(m => m.createdAt.getTime() >= luckyStartDate.getTime())
     for (const m of relevantMatches) {
@@ -215,27 +220,27 @@ export default function Leaderboard() {
       const bLucky = m.playerBLuckyPoints || 0
       if (!playerLucky[m.playerAId]) {
         const p = players.find(pl => pl.id === m.playerAId)
-        playerLucky[m.playerAId] = { name: p?.displayName || 'Unknown', total: 0, games: 0 }
+        playerLucky[m.playerAId] = { name: p?.displayName || 'Unknown', total: 0, points: 0 }
       }
       playerLucky[m.playerAId].total += aLucky
-      playerLucky[m.playerAId].games += 1
+      playerLucky[m.playerAId].points += m.playerAScore
       if (!playerLucky[m.playerBId]) {
         const p = players.find(pl => pl.id === m.playerBId)
-        playerLucky[m.playerBId] = { name: p?.displayName || 'Unknown', total: 0, games: 0 }
+        playerLucky[m.playerBId] = { name: p?.displayName || 'Unknown', total: 0, points: 0 }
       }
       playerLucky[m.playerBId].total += bLucky
-      playerLucky[m.playerBId].games += 1
+      playerLucky[m.playerBId].points += m.playerBScore
     }
     return Object.entries(playerLucky)
       .map(([id, data]) => ({
         id,
         name: data.name,
         totalLucky: data.total,
-        games: data.games,
-        avgLucky: data.games > 0 ? Math.round((data.total / data.games) * 100) / 100 : 0,
+        points: data.points,
+        luckyPct: toPct(data.total, data.points),
       }))
       .filter(e => e.totalLucky > 0)
-      .sort((a, b) => b.avgLucky - a.avgLucky)
+      .sort((a, b) => b.luckyPct - a.luckyPct)
   }, [matches, luckyMatches, players])
 
   // Unlucky points leaderboard — lucky points conceded (opponent's lucky points scored against you)
@@ -247,56 +252,56 @@ export default function Leaderboard() {
     if (!firstLuckyMatch) return []
     const luckyStartDate = firstLuckyMatch.createdAt
 
-    const playerUnlucky: Record<string, { name: string; total: number; games: number }> = {}
+    const playerUnlucky: Record<string, { name: string; total: number; conceded: number }> = {}
     const relevantMatches = luckyMatches.filter(m => m.createdAt.getTime() >= luckyStartDate.getTime())
     for (const m of relevantMatches) {
       const aLucky = m.playerALuckyPoints || 0
       const bLucky = m.playerBLuckyPoints || 0
-      // Player A concedes bLucky, Player B concedes aLucky
+      // Player A concedes bLucky out of B's points, and vice versa
       if (!playerUnlucky[m.playerAId]) {
         const p = players.find(pl => pl.id === m.playerAId)
-        playerUnlucky[m.playerAId] = { name: p?.displayName || 'Unknown', total: 0, games: 0 }
+        playerUnlucky[m.playerAId] = { name: p?.displayName || 'Unknown', total: 0, conceded: 0 }
       }
       playerUnlucky[m.playerAId].total += bLucky
-      playerUnlucky[m.playerAId].games += 1
+      playerUnlucky[m.playerAId].conceded += m.playerBScore
       if (!playerUnlucky[m.playerBId]) {
         const p = players.find(pl => pl.id === m.playerBId)
-        playerUnlucky[m.playerBId] = { name: p?.displayName || 'Unknown', total: 0, games: 0 }
+        playerUnlucky[m.playerBId] = { name: p?.displayName || 'Unknown', total: 0, conceded: 0 }
       }
       playerUnlucky[m.playerBId].total += aLucky
-      playerUnlucky[m.playerBId].games += 1
+      playerUnlucky[m.playerBId].conceded += m.playerAScore
     }
     return Object.entries(playerUnlucky)
       .map(([id, data]) => ({
         id,
         name: data.name,
         totalUnlucky: data.total,
-        games: data.games,
-        avgUnlucky: data.games > 0 ? Math.round((data.total / data.games) * 100) / 100 : 0,
+        conceded: data.conceded,
+        unluckyPct: toPct(data.total, data.conceded),
       }))
       .filter(e => e.totalUnlucky > 0)
-      .sort((a, b) => b.avgUnlucky - a.avgUnlucky)
+      .sort((a, b) => b.unluckyPct - a.unluckyPct)
   }, [matches, luckyMatches, players])
 
-  // Total lucky leaderboard — average lucky + average unlucky per player
+  // Total lucky leaderboard — lucky % scored minus lucky % conceded
   const totalLuckyLeaderboard = useMemo(() => {
-    const luckyById = new Map(luckyLeaderboard.map(e => [e.id, { name: e.name, avg: e.avgLucky }]))
-    const unluckyById = new Map(unluckyLeaderboard.map(e => [e.id, { name: e.name, avg: e.avgUnlucky }]))
+    const luckyById = new Map(luckyLeaderboard.map(e => [e.id, { name: e.name, pct: e.luckyPct }]))
+    const unluckyById = new Map(unluckyLeaderboard.map(e => [e.id, { name: e.name, pct: e.unluckyPct }]))
     const ids = new Set<string>([...luckyById.keys(), ...unluckyById.keys()])
     return [...ids]
       .map(id => {
-        const avgLucky = luckyById.get(id)?.avg || 0
-        const avgUnlucky = unluckyById.get(id)?.avg || 0
+        const luckyPct = luckyById.get(id)?.pct || 0
+        const unluckyPct = unluckyById.get(id)?.pct || 0
         const name = luckyById.get(id)?.name || unluckyById.get(id)?.name || 'Unknown'
         return {
           id,
           name,
-          avgLucky,
-          avgUnlucky,
-          avgTotal: Math.round((avgLucky - avgUnlucky) * 100) / 100,
+          luckyPct,
+          unluckyPct,
+          netPct: Math.round((luckyPct - unluckyPct) * 10) / 10,
         }
       })
-      .sort((a, b) => b.avgTotal - a.avgTotal)
+      .sort((a, b) => b.netPct - a.netPct)
   }, [luckyLeaderboard, unluckyLeaderboard])
 
   const [luckyTab, setLuckyTab] = useState<'lucky' | 'unlucky' | 'total'>('lucky')
@@ -1009,17 +1014,17 @@ export default function Leaderboard() {
           {luckyTab === 'lucky' && (
             luckyLeaderboard.length > 0 ? (
               <>
-                <div className="grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
+                <div className="grid grid-cols-[2rem_1fr_4.5rem_5rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
                   <span>#</span>
                   <span>Player</span>
-                  <span className="text-right">Avg</span>
-                  <span className="text-right">Total</span>
+                  <span className="text-right">Lucky %</span>
+                  <span className="text-right">Lucky</span>
                 </div>
                 <div className="space-y-1">
                   {luckyLeaderboard.map((entry, i) => (
                     <div
                       key={entry.id}
-                      className={`grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 items-center px-3 py-2.5 rounded-xl ${
+                      className={`grid grid-cols-[2rem_1fr_4.5rem_5rem] gap-2 items-center px-3 py-2.5 rounded-xl ${
                         i === 0 ? 'bg-yellow-500/10 border border-yellow-500/25' : 'bg-background border border-background-lighter'
                       }`}
                     >
@@ -1030,10 +1035,10 @@ export default function Leaderboard() {
                         {entry.name}
                       </span>
                       <span className={`text-sm font-bold text-right ${i === 0 ? 'text-yellow-400' : 'text-yellow-400/80'}`}>
-                        {entry.avgLucky}
+                        {entry.luckyPct}%
                       </span>
-                      <span className="text-sm text-gray-500 text-right">
-                        {entry.totalLucky}
+                      <span className="text-sm text-gray-500 text-right" title={`${entry.totalLucky} of ${entry.points} points`}>
+                        {entry.totalLucky}/{entry.points}
                       </span>
                     </div>
                   ))}
@@ -1049,17 +1054,17 @@ export default function Leaderboard() {
           {luckyTab === 'unlucky' && (
             unluckyLeaderboard.length > 0 ? (
               <>
-                <div className="grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
+                <div className="grid grid-cols-[2rem_1fr_4.5rem_5rem] gap-2 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
                   <span>#</span>
                   <span>Player</span>
-                  <span className="text-right">Avg</span>
-                  <span className="text-right">Total</span>
+                  <span className="text-right">Unlucky %</span>
+                  <span className="text-right">Lucky</span>
                 </div>
                 <div className="space-y-1">
                   {unluckyLeaderboard.map((entry, i) => (
                     <div
                       key={entry.id}
-                      className={`grid grid-cols-[2rem_1fr_4.5rem_4rem] gap-2 items-center px-3 py-2.5 rounded-xl ${
+                      className={`grid grid-cols-[2rem_1fr_4.5rem_5rem] gap-2 items-center px-3 py-2.5 rounded-xl ${
                         i === 0 ? 'bg-red-500/10 border border-red-500/25' : 'bg-background border border-background-lighter'
                       }`}
                     >
@@ -1070,10 +1075,10 @@ export default function Leaderboard() {
                         {entry.name}
                       </span>
                       <span className={`text-sm font-bold text-right ${i === 0 ? 'text-red-400' : 'text-red-400/80'}`}>
-                        {entry.avgUnlucky}
+                        {entry.unluckyPct}%
                       </span>
-                      <span className="text-sm text-gray-500 text-right">
-                        {entry.totalUnlucky}
+                      <span className="text-sm text-gray-500 text-right" title={`${entry.totalUnlucky} of ${entry.conceded} points conceded`}>
+                        {entry.totalUnlucky}/{entry.conceded}
                       </span>
                     </div>
                   ))}
@@ -1089,7 +1094,7 @@ export default function Leaderboard() {
           {luckyTab === 'total' && (
             totalLuckyLeaderboard.length > 0 ? (
               <>
-                <div className="grid grid-cols-[1.5rem_1fr_3rem_3rem_3.5rem] gap-1.5 px-3 text-[10px] text-gray-500 font-medium uppercase tracking-wider">
+                <div className="grid grid-cols-[1.5rem_1fr_3.5rem_3.5rem_4rem] gap-1.5 px-3 text-[10px] text-gray-500 font-medium uppercase tracking-wider">
                   <span>#</span>
                   <span>Player</span>
                   <span className="text-right">Lucky</span>
@@ -1100,7 +1105,7 @@ export default function Leaderboard() {
                   {totalLuckyLeaderboard.map((entry, i) => (
                     <div
                       key={entry.id}
-                      className={`grid grid-cols-[1.5rem_1fr_3rem_3rem_3.5rem] gap-1.5 items-center px-3 py-2.5 rounded-xl ${
+                      className={`grid grid-cols-[1.5rem_1fr_3.5rem_3.5rem_4rem] gap-1.5 items-center px-3 py-2.5 rounded-xl ${
                         i === 0 ? 'bg-accent/10 border border-accent/25' : 'bg-background border border-background-lighter'
                       }`}
                     >
@@ -1111,19 +1116,19 @@ export default function Leaderboard() {
                         {entry.name}
                       </span>
                       <span className="text-sm text-yellow-400/80 text-right">
-                        {entry.avgLucky}
+                        {entry.luckyPct}%
                       </span>
                       <span className="text-sm text-red-400/80 text-right">
-                        {entry.avgUnlucky}
+                        {entry.unluckyPct}%
                       </span>
-                      <span className={`text-sm font-bold text-right ${entry.avgTotal >= 0 ? 'text-success' : 'text-error'}`}>
-                        {entry.avgTotal > 0 ? '+' : ''}{entry.avgTotal}
+                      <span className={`text-sm font-bold text-right ${entry.netPct >= 0 ? 'text-success' : 'text-error'}`}>
+                        {entry.netPct > 0 ? '+' : ''}{entry.netPct}%
                       </span>
                     </div>
                   ))}
                 </div>
                 <p className="text-[10px] text-gray-500 px-3">
-                  Total = avg lucky − avg unlucky (conceded) per game
+                  Total = lucky % of your points − lucky % of points scored against you
                 </p>
               </>
             ) : (
