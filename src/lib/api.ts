@@ -53,9 +53,11 @@ export async function setPlayerRetired(playerId: string, retired: boolean) {
   return res.json()
 }
 
-export async function deletePlayer(playerId: string) {
+export async function deletePlayer(playerId: string, password: string) {
   const res = await fetch(`${API_URL}/players/${playerId}`, {
     method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password })
   })
   if (!res.ok) {
     const error = await res.json()

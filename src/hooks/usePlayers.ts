@@ -42,8 +42,8 @@ export function usePlayers() {
     return newPlayer
   }, [loadPlayers])
 
-  const deletePlayer = useCallback(async (playerId: string) => {
-    await apiDeletePlayer(playerId)
+  const deletePlayer = useCallback(async (playerId: string, password: string) => {
+    await apiDeletePlayer(playerId, password)
     await loadPlayers()
   }, [loadPlayers])
 

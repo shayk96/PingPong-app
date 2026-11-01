@@ -64,6 +64,7 @@ export default function Leaderboard() {
   const [showDeletePlayerModal, setShowDeletePlayerModal] = useState(false)
   const [deletePlayerId, setDeletePlayerId] = useState('')
   const [deletePlayerName, setDeletePlayerName] = useState('')
+  const [deletePassword, setDeletePassword] = useState('')
   const [deletingPlayer, setDeletingPlayer] = useState(false)
 
   // Delete match modal state
@@ -397,13 +398,18 @@ export default function Leaderboard() {
   const handleDeletePlayerClick = (playerId: string, playerName: string) => {
     setDeletePlayerId(playerId)
     setDeletePlayerName(playerName)
+    setDeletePassword('')
     setShowDeletePlayerModal(true)
   }
 
   const handleDeletePlayer = async () => {
+    if (!deletePassword) {
+      showToast('Enter the admin password to delete a player', 'error')
+      return
+    }
     setDeletingPlayer(true)
     try {
-      await deletePlayer(deletePlayerId)
+      await deletePlayer(deletePlayerId, deletePassword)
       await refreshMatches()
       showToast(`${deletePlayerName} deleted successfully!`, 'success')
       setShowDeletePlayerModal(false)
@@ -765,6 +771,17 @@ export default function Leaderboard() {
               This will permanently delete <strong className="text-white">{deletePlayerName}</strong> and all their match history. This action cannot be undone.
             </p>
           </div>
+
+          <Input
+            label="Admin password"
+            type="password"
+            value={deletePassword}
+            onChange={(e) => setDeletePassword(e.target.value)}
+            placeholder="Required to delete"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleDeletePlayer()
+            }}
+          />
           
           <div className="flex gap-3">
             <Button
@@ -778,6 +795,7 @@ export default function Leaderboard() {
               variant="primary"
               onClick={handleDeletePlayer}
               loading={deletingPlayer}
+              disabled={!deletePassword}
               className="flex-1 !bg-error hover:!bg-error/80"
             >
               Delete Player
