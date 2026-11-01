@@ -7,8 +7,11 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
+import { useSeason } from '../hooks/useSeason'
+import { classifyActivity } from '../hooks/useStats'
 import { validateMatch } from '../lib/validation'
 import { expectedScore } from '../lib/elo'
+import { luckyRate, simulateGame, type PredictedGame } from '../lib/prediction'
 import { ToastContainer, useToast, Button } from '../components/ui'
 import type { NewMatchInput, User } from '../types'
 
@@ -23,6 +26,7 @@ export default function NewMatch() {
   const navigate = useNavigate()
   const { players, loading: playersLoading, refresh: refreshPlayers } = usePlayers()
   const { matches, createMatch } = useMatches()
+  const { currentSeason } = useSeason()
   const { toasts, showToast, removeToast } = useToast()
   const [submitting, setSubmitting] = useState(false)
   const [submitProgress, setSubmitProgress] = useState('')
@@ -187,11 +191,39 @@ export default function NewMatch() {
     [players]
   )
   const [playerSearch, setPlayerSearch] = useState('')
+  const [showInactive, setShowInactive] = useState(false)
+  const activity = useMemo(
+    () => classifyActivity(players, matches, currentSeason?.seasonNumber),
+    [players, matches, currentSeason],
+  )
+  const inactivePlayerCount = useMemo(
+    () => sortedPlayers.filter(p => activity.get(p.id) !== 'active').length,
+    [sortedPlayers, activity],
+  )
+  // Search always covers everyone; otherwise inactive players stay hidden unless shown or picked
   const filteredPlayers = useMemo(() => {
-    if (!playerSearch.trim()) return sortedPlayers
     const q = playerSearch.trim().toLowerCase()
-    return sortedPlayers.filter(p => p.displayName.toLowerCase().includes(q))
-  }, [sortedPlayers, playerSearch])
+    if (q) return sortedPlayers.filter(p => p.displayName.toLowerCase().includes(q))
+    if (showInactive) return sortedPlayers
+    return sortedPlayers.filter(
+      p => activity.get(p.id) === 'active' || p.id === playerA?.id || p.id === playerB?.id
+    )
+  }, [sortedPlayers, playerSearch, showInactive, activity, playerA, playerB])
+
+  const [prediction, setPrediction] = useState<PredictedGame | null>(null)
+  const luckyRates = useMemo(
+    () => (playerA && playerB ? { a: luckyRate(matches, playerA.id), b: luckyRate(matches, playerB.id) } : null),
+    [matches, playerA, playerB],
+  )
+  const predict = useCallback(() => {
+    if (!winProb || !luckyRates) return
+    setPrediction(simulateGame(winProb.pctA / 100, luckyRates.a, luckyRates.b))
+  }, [winProb, luckyRates])
+
+  // Keep an open prediction in sync with the chosen matchup
+  useEffect(() => {
+    setPrediction(prev => (prev && winProb && luckyRates ? simulateGame(winProb.pctA / 100, luckyRates.a, luckyRates.b) : null))
+  }, [winProb, luckyRates])
 
   const selectPlayer = (player: User, slot: 'A' | 'B') => {
     if (slot === 'A') {
@@ -330,6 +362,15 @@ export default function NewMatch() {
           {playerSearch.trim() && filteredPlayers.length === 0 && (
             <p className="mt-2 text-xs text-gray-500 text-center">No players match your search</p>
           )}
+          {!playerSearch.trim() && inactivePlayerCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowInactive(v => !v)}
+              className="w-full mt-2 py-2 rounded-xl border border-dashed border-background-lighter text-gray-400 text-xs font-medium hover:text-white hover:border-gray-500 transition-colors"
+            >
+              {showInactive ? 'Hide inactive players' : `+ Add inactive player (${inactivePlayerCount})`}
+            </button>
+          )}
 
           {/* VS display with names, H2H record, and blended win probability */}
           {playerA && playerB && winProb && (
@@ -377,6 +418,44 @@ export default function NewMatch() {
                     }}
                   />
                 </div>
+              </div>
+
+              {/* Score prediction (for fun, never saved) */}
+              <div className="mt-2.5 pt-2.5 border-t border-background-lighter">
+                {prediction ? (
+                  <div className="text-center">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">🔮 Predicted score</div>
+                    <div className="flex items-center justify-center gap-3">
+                      <span className={`font-display font-bold text-2xl ${prediction.scoreA > prediction.scoreB ? 'text-accent' : 'text-gray-300'}`}>
+                        {prediction.scoreA}
+                      </span>
+                      <span className="text-gray-500">–</span>
+                      <span className={`font-display font-bold text-2xl ${prediction.scoreB > prediction.scoreA ? 'text-accent' : 'text-gray-300'}`}>
+                        {prediction.scoreB}
+                      </span>
+                    </div>
+                    <div className="text-xs text-yellow-400/90 mt-0.5">
+                      &#9733; {prediction.luckyA} – {prediction.luckyB} lucky
+                    </div>
+                    <div className="flex items-center justify-center gap-3 mt-2">
+                      <button type="button" onClick={predict} className="text-xs font-medium text-accent hover:underline">
+                        🎲 Predict again
+                      </button>
+                      <button type="button" onClick={() => setPrediction(null)} className="text-xs text-gray-500 hover:text-gray-300">
+                        Hide
+                      </button>
+                    </div>
+                    <div className="text-[10px] text-gray-600 mt-1">Just for fun — not saved</div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={predict}
+                    className="w-full py-2 rounded-lg bg-accent/10 text-accent text-xs font-semibold hover:bg-accent/20 transition-colors"
+                  >
+                    🔮 Predict score
+                  </button>
+                )}
               </div>
             </div>
           )}

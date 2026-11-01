@@ -114,13 +114,49 @@ export function isPlayerInactive(_lastPlayedAt: Date | undefined, totalGames?: n
   return (totalGames ?? 0) < MIN_GAMES_FOR_RANKING
 }
 
+export type PlayerActivity = 'active' | 'inactive' | 'absent'
+
+/**
+ * Within a season: 'absent' = no games this season (hidden everywhere until they play),
+ * 'inactive' = under 5 games this season or on record, 'active' = everyone else.
+ * Without a season only the all-time 5-game rule applies.
+ */
+export function classifyActivity(
+  players: User[],
+  matches: Match[],
+  seasonNumber?: number
+): Map<string, PlayerActivity> {
+  const seasonGames = new Map<string, number>()
+  if (seasonNumber !== undefined) {
+    for (const m of matches) {
+      if ((m.seasonNumber ?? 1) !== seasonNumber) continue
+      seasonGames.set(m.winnerId, (seasonGames.get(m.winnerId) ?? 0) + 1)
+      seasonGames.set(m.loserId, (seasonGames.get(m.loserId) ?? 0) + 1)
+    }
+  }
+  const result = new Map<string, PlayerActivity>()
+  for (const p of players) {
+    const allTime = (p.wins || 0) + (p.losses || 0)
+    if (seasonNumber === undefined) {
+      result.set(p.id, isPlayerInactive(p.lastPlayedAt, allTime) ? 'inactive' : 'active')
+      continue
+    }
+    const games = seasonGames.get(p.id) ?? 0
+    if (games === 0) result.set(p.id, 'absent')
+    else if (games < MIN_GAMES_FOR_RANKING || isPlayerInactive(p.lastPlayedAt, allTime)) result.set(p.id, 'inactive')
+    else result.set(p.id, 'active')
+  }
+  return result
+}
+
 /**
  * Calculate leaderboard with rankings and rank changes
  * Given a season, W/L and provisional status (< 5 games) are counted within that
  * season — ELO resets each season, so all-time records would not match the rating.
  * Only established players get a numbered rank.
  * Inactive players (< 5 games on record, or < 5 this season) are hidden unless
- * includeInactive is true. Players retired as of the season are always left out.
+ * includeInactive is true. Players retired as of the season, or with no games in it,
+ * are always left out.
  */
 export function useLeaderboard(
   players: User[],
@@ -146,21 +182,14 @@ export function useLeaderboard(
         ? seasonRecord.get(user.id) ?? { wins: 0, losses: 0 }
         : { wins: user.wins || 0, losses: user.losses || 0 }
 
-    // Inactive: fewer than 5 games on record, or (within a season) fewer than 5 this season
-    const inactiveIds = new Set(
-      players
-        .filter(p => {
-          const allTime = (p.wins || 0) + (p.losses || 0)
-          if (isPlayerInactive(p.lastPlayedAt, allTime)) return true
-          if (seasonNumber === undefined) return false
-          const r = recordOf(p)
-          return r.wins + r.losses < MIN_GAMES_FOR_RANKING
-        })
-        .map(p => p.id)
-    )
+    const activity = classifyActivity(players, matches, seasonNumber)
+    const inactiveIds = new Set(players.filter(p => activity.get(p.id) === 'inactive').map(p => p.id))
 
     const playersToRank = players.filter(
-      p => !isRetiredIn(p, seasonNumber) && (includeInactive || !inactiveIds.has(p.id))
+      p =>
+        !isRetiredIn(p, seasonNumber) &&
+        activity.get(p.id) !== 'absent' &&
+        (includeInactive || !inactiveIds.has(p.id))
     )
 
     const sortedPlayers = [...playersToRank].sort((a, b) => b.eloRating - a.eloRating)
