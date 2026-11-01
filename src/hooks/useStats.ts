@@ -149,6 +149,14 @@ export function classifyActivity(
   return result
 }
 
+/** Ids of players who count as active in the season (and haven't retired from it) */
+export function activePlayerIds(players: User[], matches: Match[], seasonNumber?: number): Set<string> {
+  const activity = classifyActivity(players, matches, seasonNumber)
+  return new Set(
+    players.filter(p => activity.get(p.id) === 'active' && !isRetiredIn(p, seasonNumber)).map(p => p.id)
+  )
+}
+
 /**
  * Calculate leaderboard with rankings and rank changes
  * Given a season, W/L and provisional status (< 5 games) are counted within that

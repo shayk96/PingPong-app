@@ -8,7 +8,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
 import { useSeason } from '../hooks/useSeason'
-import { useLeaderboard, useRecentMatchesWithPlayers } from '../hooks/useStats'
+import { useLeaderboard, useRecentMatchesWithPlayers, activePlayerIds } from '../hooks/useStats'
 import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable'
 import { MatchCard } from '../components/match/MatchCard'
 import { EditMatchModal, canEditMatch, isInClosedSeason } from '../components/match/EditMatchModal'
@@ -195,6 +195,11 @@ export default function Leaderboard() {
   )
   const luckyMatches = useMemo(() => filterBySeason(matches, luckySeason), [matches, luckySeason])
 
+  const activeIds = useMemo(
+    () => activePlayerIds(players, matches, currentSeason?.seasonNumber),
+    [players, matches, currentSeason],
+  )
+
   // Lucky points leaderboard data — only count games since lucky tracking began
   const luckyLeaderboard = useMemo(() => {
     // Find the earliest match with any lucky points to determine feature start date
@@ -234,9 +239,9 @@ export default function Leaderboard() {
         points: data.points,
         luckyPct: toPct(data.total, data.points),
       }))
-      .filter(e => e.totalLucky > 0)
+      .filter(e => e.totalLucky > 0 && activeIds.has(e.id))
       .sort((a, b) => b.luckyPct - a.luckyPct)
-  }, [matches, luckyMatches, players])
+  }, [matches, luckyMatches, players, activeIds])
 
   // Unlucky points leaderboard — lucky points conceded (opponent's lucky points scored against you)
   const unluckyLeaderboard = useMemo(() => {
@@ -274,9 +279,9 @@ export default function Leaderboard() {
         conceded: data.conceded,
         unluckyPct: toPct(data.total, data.conceded),
       }))
-      .filter(e => e.totalUnlucky > 0)
+      .filter(e => e.totalUnlucky > 0 && activeIds.has(e.id))
       .sort((a, b) => b.unluckyPct - a.unluckyPct)
-  }, [matches, luckyMatches, players])
+  }, [matches, luckyMatches, players, activeIds])
 
   // Total lucky leaderboard — lucky % scored minus lucky % conceded
   const totalLuckyLeaderboard = useMemo(() => {

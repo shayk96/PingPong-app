@@ -21,6 +21,8 @@ export interface RecordHolder {
   detail?: string
   /** The other player, for head-to-head records */
   opponentName?: string
+  /** Set on pair records, which only count when both players are included */
+  opponentId?: string
   /** Matches behind the record, for drill-down */
   matchIds?: string[]
 }
@@ -214,9 +216,10 @@ function bucketLabel(b: Bucket, gran: Granularity): string {
 export function computeHallOfFame(
   matches: Match[],
   players: User[],
-  options: { allMatches?: Match[]; seasons?: Season[] } = {},
+  options: { allMatches?: Match[]; seasons?: Season[]; includePlayer?: (id: string) => boolean } = {},
 ): RecordCategory[] {
   const allMatches = options.allMatches ?? matches
+  const include = options.includePlayer ?? (() => true)
   const seasons = options.seasons ?? []
   const sorted = [...matches].sort((a, b) => asDate(a).getTime() - asDate(b).getTime())
   if (sorted.length === 0) return []
@@ -255,9 +258,12 @@ export function computeHallOfFame(
 
   const cats: RecordCategory[] = []
 
-  /** Rank holders best-first and keep the podium. */
+  /** Rank holders best-first and keep the podium (pair records need both players included). */
   const rank = (holders: RecordHolder[], minValue = 0) =>
-    holders.filter(h => h.value > minValue).sort((a, b) => b.value - a.value).slice(0, TOP_N)
+    holders
+      .filter(h => h.value > minValue && include(h.playerId) && (!h.opponentId || include(h.opponentId)))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, TOP_N)
 
   const push = (cat: RecordCategory) => {
     if (cat.holders.length > 0) cats.push(cat)
@@ -355,6 +361,7 @@ export function computeHallOfFame(
           display: `${s.length}`,
           detail: fmtRange(s.startDate, s.endDate),
           opponentName: name(oppId),
+          opponentId: oppId,
           matchIds: s.matchIds,
         })
       }
@@ -810,6 +817,7 @@ export function computeHallOfFame(
           display: `${wins}–${pm.length - wins}`,
           detail: `${Math.round(pct)}% win rate over ${plural(pm.length, 'game')}`,
           opponentName: name(oppId),
+          opponentId: oppId,
           matchIds: pm.map(m => m.id),
         })
       }
@@ -915,6 +923,7 @@ export function computeHallOfFame(
       display: `${pm.length}`,
       detail: `leads ${leaderWins}–${pm.length - leaderWins}`,
       opponentName: name(other),
+      opponentId: other,
       matchIds: pm.map(m => m.id),
     })
   }

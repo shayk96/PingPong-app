@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { usePlayers } from '../hooks/usePlayers'
 import { useMatches } from '../hooks/useMatches'
 import { useSeason } from '../hooks/useSeason'
+import { activePlayerIds } from '../hooks/useStats'
 import { Modal } from '../components/ui/Modal'
 import { SeasonFilter } from '../components/season/SeasonFilter'
 import { computeHallOfFame, RECORD_GROUPS, type RecordGroup, type RecordHolder } from '../lib/hallOfFame'
@@ -87,8 +88,15 @@ export default function Records() {
   }, [matches, season, range, customFrom, customTo])
 
   const categories = useMemo(
-    () => computeHallOfFame(rangedMatches, players, { allMatches: matches, seasons: allSeasons }),
-    [rangedMatches, players, matches, allSeasons],
+    () => {
+      const active = activePlayerIds(players, matches, currentSeason?.seasonNumber)
+      return computeHallOfFame(rangedMatches, players, {
+        allMatches: matches,
+        seasons: allSeasons,
+        includePlayer: id => active.has(id),
+      })
+    },
+    [rangedMatches, players, matches, allSeasons, currentSeason],
   )
 
   const visibleCategories = useMemo(
