@@ -25,7 +25,7 @@ function toPct(part: number, whole: number): number {
 
 export default function Leaderboard() {
   const navigate = useNavigate()
-  const { players, loading: playersLoading, addPlayer, deletePlayer, retirePlayer, refresh: refreshPlayers } = usePlayers()
+  const { players, loading: playersLoading, addPlayer, refresh: refreshPlayers } = usePlayers()
   const { matches, loading: matchesLoading, deleteMatch, editMatch, undoMatch, refresh: refreshMatches } = useMatches()
   const { currentSeason, pastSeasons, loading: seasonLoading, refresh: refreshSeason } = useSeason()
   const [showInactivePlayers, setShowInactivePlayers] = useState(false)
@@ -61,12 +61,6 @@ export default function Leaderboard() {
   const [addingPlayer, setAddingPlayer] = useState(false)
 
   // Delete player modal state
-  const [showDeletePlayerModal, setShowDeletePlayerModal] = useState(false)
-  const [deletePlayerId, setDeletePlayerId] = useState('')
-  const [deletePlayerName, setDeletePlayerName] = useState('')
-  const [deletePassword, setDeletePassword] = useState('')
-  const [deletingPlayer, setDeletingPlayer] = useState(false)
-
   // Delete match modal state
   const [showDeleteMatchModal, setShowDeleteMatchModal] = useState(false)
   const [deleteMatchId, setDeleteMatchId] = useState('')
@@ -395,47 +389,6 @@ export default function Leaderboard() {
     }
   }
 
-  const handleDeletePlayerClick = (playerId: string, playerName: string) => {
-    setDeletePlayerId(playerId)
-    setDeletePlayerName(playerName)
-    setDeletePassword('')
-    setShowDeletePlayerModal(true)
-  }
-
-  const handleDeletePlayer = async () => {
-    if (!deletePassword) {
-      showToast('Enter the admin password to delete a player', 'error')
-      return
-    }
-    setDeletingPlayer(true)
-    try {
-      await deletePlayer(deletePlayerId, deletePassword)
-      await refreshMatches()
-      showToast(`${deletePlayerName} deleted successfully!`, 'success')
-      setShowDeletePlayerModal(false)
-    } catch (err) {
-      showToast(
-        err instanceof Error ? err.message : 'Failed to delete player',
-        'error'
-      )
-    } finally {
-      setDeletingPlayer(false)
-    }
-  }
-
-  const handleRetirePlayer = async () => {
-    setDeletingPlayer(true)
-    try {
-      await retirePlayer(deletePlayerId, true)
-      showToast(`${deletePlayerName} retired — history kept`, 'success')
-      setShowDeletePlayerModal(false)
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to retire player', 'error')
-    } finally {
-      setDeletingPlayer(false)
-    }
-  }
-
   const handleDeleteMatchClick = (matchId: string, matchInfo: string) => {
     setDeleteMatchId(matchId)
     setDeleteMatchInfo(matchInfo)
@@ -648,7 +601,6 @@ export default function Leaderboard() {
           ) : (
             <LeaderboardTable
               entries={leaderboard}
-              onDeletePlayer={handleDeletePlayerClick}
               matches={seasonMatches}
               seasonBadges={seasonBadges}
             />
@@ -740,67 +692,6 @@ export default function Leaderboard() {
               className="flex-1"
             >
               Add Player
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Delete Player Modal */}
-      <Modal
-        isOpen={showDeletePlayerModal}
-        onClose={() => setShowDeletePlayerModal(false)}
-        title="Remove Player"
-      >
-        <div className="space-y-4">
-          <div className="bg-background rounded-xl p-4 space-y-3">
-            <p className="text-gray-300 text-sm">
-              <strong className="text-white">Retire</strong> {deletePlayerName} if they left: they're removed from this
-              season and every season after, but all their past matches, records and season results stay.
-            </p>
-            <Button
-              variant="primary"
-              onClick={handleRetirePlayer}
-              loading={deletingPlayer}
-              className="w-full"
-            >
-              Retire Player (keep history)
-            </Button>
-          </div>
-
-          <div className="bg-error/10 border border-error/30 rounded-xl p-4">
-            <p className="text-error font-medium mb-1">⚠️ Warning</p>
-            <p className="text-gray-300 text-sm">
-              This will permanently delete <strong className="text-white">{deletePlayerName}</strong> and all their match history. This action cannot be undone.
-            </p>
-          </div>
-
-          <Input
-            label="Admin password"
-            type="password"
-            value={deletePassword}
-            onChange={(e) => setDeletePassword(e.target.value)}
-            placeholder="Required to delete"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleDeletePlayer()
-            }}
-          />
-          
-          <div className="flex gap-3">
-            <Button
-              variant="secondary"
-              onClick={() => setShowDeletePlayerModal(false)}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleDeletePlayer}
-              loading={deletingPlayer}
-              disabled={!deletePassword}
-              className="flex-1 !bg-error hover:!bg-error/80"
-            >
-              Delete Player
             </Button>
           </div>
         </div>

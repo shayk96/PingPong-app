@@ -11,15 +11,22 @@ const FIRE_MIN = 6 // winning streak of over 5 games
 const ICE_MIN = 5  // losing streak of 5+ games
 const MIN_RANKED_GAMES = 5
 
+const MOMENTUM_GAMES = 10
+
+interface Momentum {
+  wins: number
+  losses: number
+  delta: number
+}
+
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[]
-  onDeletePlayer?: (playerId: string, playerName: string) => void
   matches?: Match[]
   /** Podium of the last completed season, keyed by player id */
   seasonBadges?: Map<string, SeasonBadge>
 }
 
-export function LeaderboardTable({ entries, onDeletePlayer, matches = [], seasonBadges }: LeaderboardTableProps) {
+export function LeaderboardTable({ entries, matches = [], seasonBadges }: LeaderboardTableProps) {
   const navigate = useNavigate()
 
   // Count total 11-0 wins per player
@@ -36,6 +43,27 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [], season
 
   // Current win/loss streak per player (for Fire/Ice badges)
   const streakMap = useMemo(() => computeCurrentStreaks(matches), [matches])
+
+  // Record and net ELO over each player's last 10 games
+  const momentumMap = useMemo(() => {
+    const map = new Map<string, Momentum>()
+    const newestFirst = [...matches].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+    const add = (id: string, won: boolean, delta: number) => {
+      const m = map.get(id) ?? { wins: 0, losses: 0, delta: 0 }
+      if (m.wins + m.losses >= MOMENTUM_GAMES) return
+      if (won) m.wins++
+      else m.losses++
+      m.delta += delta
+      map.set(id, m)
+    }
+    for (const m of newestFirst) {
+      add(m.winnerId, true, m.winnerEloDelta)
+      add(m.loserId, false, m.loserEloDelta)
+    }
+    return map
+  }, [matches])
 
   // Today's ELO delta per player
   const todayDeltaMap = useMemo(() => {
@@ -142,24 +170,32 @@ export function LeaderboardTable({ entries, onDeletePlayer, matches = [], season
               )}
             </div>
 
-            {/* Delete button */}
-            {onDeletePlayer && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDeletePlayer(entry.user.id, entry.user.displayName)
-                }}
-                className="flex-shrink-0 p-1.5 text-gray-500 hover:text-error hover:bg-error/10 rounded-lg transition-colors"
-                title="Delete player"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            )}
+            <MomentumArrow momentum={momentumMap.get(entry.user.id)} />
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** Arrow tilted by net ELO over the last 10 games: steep up → flat → steep down */
+function MomentumArrow({ momentum }: { momentum?: Momentum }) {
+  if (!momentum) return <div className="flex-shrink-0 w-7" />
+  const { wins, losses, delta } = momentum
+  const [rotation, color] =
+    delta >= 30 ? [-90, 'text-success']
+    : delta >= 10 ? [-45, 'text-success/80']
+    : delta > -10 ? [0, 'text-gray-400']
+    : delta > -30 ? [45, 'text-error/80']
+    : [90, 'text-error']
+  return (
+    <div
+      className={`flex-shrink-0 w-7 h-7 flex items-center justify-center ${color}`}
+      title={`Last ${wins + losses}: ${wins}W–${losses}L, ${delta > 0 ? '+' : ''}${delta} ELO`}
+    >
+      <svg className="w-4 h-4 transition-transform" style={{ transform: `rotate(${rotation}deg)` }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14m-6-6l6 6-6 6" />
+      </svg>
     </div>
   )
 }

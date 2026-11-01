@@ -25,7 +25,7 @@ import { useMatches } from '../hooks/useMatches'
 import { usePlayerStats, useLeaderboard } from '../hooks/useStats'
 import { fetchEloHistory, EloHistoryEntry, renamePlayer } from '../lib/api'
 import { getRatingTier, formatEloDelta } from '../lib/elo'
-import { Button, Modal } from '../components/ui'
+import { Button, Input, Modal } from '../components/ui'
 import { EloGraphModal } from '../components/graph/EloGraphModal'
 import { computeH2HStats } from '../lib/streaks'
 import { computeEloPeriodRecords, type PeriodRecord } from '../lib/records'
@@ -95,8 +95,12 @@ ChartJS.register(
 export default function PlayerProfile() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { players, loading: playersLoading, retirePlayer } = usePlayers()
+  const { players, loading: playersLoading, retirePlayer, deletePlayer } = usePlayers()
   const [reactivating, setReactivating] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleting, setDeleting] = useState(false)
   const { matches: allMatches, loading: matchesLoading } = useMatches()
   const { currentSeason, pastSeasons } = useSeason()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -1060,6 +1064,75 @@ export default function PlayerProfile() {
           )}
         </div>
       </section>
+
+      {/* Manage player */}
+      <section className="mt-8 mb-4 space-y-2">
+        {player.retiredFromSeason == null && (
+          <button
+            type="button"
+            disabled={reactivating}
+            onClick={async () => {
+              if (!window.confirm(`Retire ${player.displayName}? They'll be hidden from this season on, but all history stays.`)) return
+              setReactivating(true)
+              try { await retirePlayer(player.id, true) } finally { setReactivating(false) }
+            }}
+            className="w-full py-2.5 rounded-xl border border-background-lighter text-gray-400 text-sm font-medium hover:bg-background-lighter hover:text-gray-200 transition-colors disabled:opacity-50"
+          >
+            👋 Retire player (keep history)
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => { setDeletePassword(''); setDeleteError(''); setShowDeleteModal(true) }}
+          className="w-full py-2.5 rounded-xl border border-error/30 text-error/80 text-sm font-medium hover:bg-error/10 hover:text-error transition-colors"
+        >
+          Delete player
+        </button>
+      </section>
+
+      <Modal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete Player">
+        <div className="space-y-4">
+          <div className="bg-error/10 border border-error/30 rounded-xl p-4">
+            <p className="text-error font-medium mb-1">⚠️ Warning</p>
+            <p className="text-gray-300 text-sm">
+              This permanently deletes <strong className="text-white">{player.displayName}</strong> and all their
+              matches. It can't be undone — if they just left, retire them instead.
+            </p>
+          </div>
+          <Input
+            label="Password"
+            type="password"
+            value={deletePassword}
+            onChange={(e) => { setDeletePassword(e.target.value); setDeleteError('') }}
+            placeholder="Required to delete"
+            error={deleteError || undefined}
+          />
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setShowDeleteModal(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={deleting}
+              disabled={!deletePassword}
+              className="flex-1 !bg-error hover:!bg-error/80"
+              onClick={async () => {
+                setDeleting(true)
+                try {
+                  await deletePlayer(player.id, deletePassword)
+                  navigate('/leaderboard')
+                } catch (err) {
+                  setDeleteError(err instanceof Error ? err.message : 'Failed to delete player')
+                } finally {
+                  setDeleting(false)
+                }
+              }}
+            >
+              Delete Player
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Compare ELO Graph Modal */}
       <EloGraphModal

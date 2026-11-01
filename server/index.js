@@ -21,6 +21,7 @@ const PORT = process.env.PORT || 3001
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pingpong'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '207902602'
+const DELETE_PLAYER_PASSWORD = process.env.DELETE_PLAYER_PASSWORD || 'pingpong1234'
 
 // Cached MongoDB connection for serverless cold starts
 let isConnected = false
@@ -474,8 +475,8 @@ app.delete('/api/players/:id', async (req, res) => {
   const { id } = req.params
   const { password } = req.body || {}
 
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(403).json({ error: 'Invalid admin password' })
+  if (password !== DELETE_PLAYER_PASSWORD) {
+    return res.status(403).json({ error: 'Wrong password' })
   }
 
   try {
