@@ -9,6 +9,7 @@ import DailyRanking from './pages/DailyRanking'
 import RangeScoreboard from './pages/RangeScoreboard'
 import Records from './pages/Records'
 import SeasonHistory from './pages/SeasonHistory'
+import Rules from './pages/Rules'
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
         <Route path="scoreboard" element={<RangeScoreboard />} />
         <Route path="records" element={<Records />} />
         <Route path="seasons" element={<SeasonHistory />} />
+        <Route path="rules" element={<Rules />} />
       </Route>
       
       {/* Catch all */}

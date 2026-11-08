@@ -7,7 +7,7 @@ export function BottomNav() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches') || location.pathname.startsWith('/room') || location.pathname.startsWith('/daily') || location.pathname.startsWith('/scoreboard') || location.pathname.startsWith('/records') || location.pathname.startsWith('/seasons')
+  const hideButtons = location.pathname.startsWith('/new-match') || location.pathname.startsWith('/matches') || location.pathname.startsWith('/room') || location.pathname.startsWith('/daily') || location.pathname.startsWith('/scoreboard') || location.pathname.startsWith('/records') || location.pathname.startsWith('/seasons') || location.pathname.startsWith('/rules')
 
   // Close menu on outside click
   useEffect(() => {
@@ -81,6 +81,14 @@ export function BottomNav() {
                 >
                   <span className="w-5 h-5 flex items-center justify-center text-base leading-none">🏆</span>
                   Past Seasons
+                </button>
+                <div className="h-px bg-background-lighter" />
+                <button
+                  onClick={() => navigate('/rules')}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-200 hover:bg-background-lighter transition-colors"
+                >
+                  <span className="w-5 h-5 flex items-center justify-center text-base leading-none">📜</span>
+                  League Rules
                 </button>
                 <div className="h-px bg-background-lighter" />
                 <button
